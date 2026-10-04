@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laya Autopilot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=VT323&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#05060d; --win-top:#1b2f9c; --win-bot:#040a36; --edge:#e9ecf5; --edge-dim:#8a90a8;
+  --text:#f2f4fa; --dim:#9aa3c7; --label:#6fd3ff; --hp1:#36e0ff; --hp2:#2466ff;
+  --mp1:#7dff9a; --mp2:#1f9a4c; --warn:#ffd54a; --bad:#ff5c6c; --ok:#6cff9e;
+  --px:'Pixelify Sans',ui-monospace,monospace; --mono:'VT323',ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:22px;line-height:1.05;
+  background-image:radial-gradient(ellipse at 50% 35%,#101a4a 0%,#05060d 70%);overflow-x:hidden}
+/* CRT: scanlines + vignette, pointer-events off so it never blocks clicks */
+body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:50;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0 1px,transparent 1px 3px),
+             radial-gradient(ellipse at center,transparent 60%,rgba(0,0,0,.55) 100%)}
+body.no-crt::after{display:none}
+
+/* ---------- boot ---------- */
+#boot{position:fixed;inset:0;z-index:60;background:#000;display:grid;place-items:center;
+  transition:opacity .6s ease}
+#boot.gone{opacity:0;pointer-events:none}
+.boot-inner{text-align:center;perspective:600px}
+.gem{width:90px;height:90px;margin:0 auto 34px;transform-style:preserve-3d;animation:spin 2.4s linear infinite}
+.gem i{position:absolute;inset:0;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);
+  background:linear-gradient(135deg,#9ff 0%,#36f 45%,#102 100%);opacity:.85}
+.gem i:nth-child(2){transform:rotateY(60deg)} .gem i:nth-child(3){transform:rotateY(120deg)}
+@keyframes spin{to{transform:rotateY(360deg) rotateX(12deg)}}
+.boot-title{font-family:var(--px);font-size:34px;letter-spacing:.35em;color:#dfe6ff;opacity:0;animation:fade 1s .4s forwards}
+.boot-sub{font-size:20px;color:var(--dim);letter-spacing:.3em;margin-top:10px;opacity:0;animation:fade 1s .9s forwards}
+.boot-hint{margin-top:40px;font-size:18px;color:#5b6490;animation:blink 1.2s steps(2) infinite}
+@keyframes fade{to{opacity:1}} @keyframes blink{50%{opacity:0}}
+
+/* ---------- FF-style window ---------- */
+.win{position:relative;background:linear-gradient(180deg,var(--win-top),var(--win-bot));
+  border:3px solid var(--edge);border-radius:8px;padding:14px 16px;
+  box-shadow:inset 0 0 0 2px #0c1450,inset 0 0 0 3px #5d6cb8,0 6px 0 rgba(0,0,0,.45)}
+.win h2{margin:0 0 10px;font-family:var(--px);font-weight:600;font-size:15px;letter-spacing:.2em;color:var(--label);text-transform:uppercase}
+.label{color:var(--label)}
+.dim{color:var(--dim)}
+
+/* ---------- layout ---------- */
+.app{max-width:1360px;margin:0 auto;padding:18px 16px 28px;display:grid;gap:14px;
+  grid-template-columns:270px minmax(0,1fr) minmax(0,1.05fr);
+  grid-template-areas:"head head head" "cmd party map" "cmd status map" "cmd status log" "foot foot log"}
+header{grid-area:head;display:flex;align-items:center;gap:14px;justify-content:space-between;flex-wrap:wrap}
+.brand{font-family:var(--px);font-size:24px;letter-spacing:.28em}
+.brand small{display:block;font-family:var(--mono);font-size:18px;letter-spacing:.15em;color:var(--dim)}
+.pill{font-family:var(--px);font-size:14px;letter-spacing:.2em;padding:8px 14px;border:2px solid currentColor;border-radius:4px}
+.pill.running{color:var(--ok);animation:pulse 1.4s ease-in-out infinite}
+.pill.idle,.pill.stopped{color:var(--dim)} .pill.blocked{color:var(--warn)} .pill.error,.pill.offline{color:var(--bad)}
+.pill.loading{color:var(--label)}
+@keyframes pulse{50%{box-shadow:0 0 14px currentColor}}
+.cmd{grid-area:cmd} .party{grid-area:party} .status{grid-area:status} .map{grid-area:map} .log{grid-area:log} .foot{grid-area:foot}
+
+/* ---------- command menu ---------- */
+.menu{list-style:none;margin:0;padding:0}
+.menu li{position:relative;padding:6px 0 6px 34px;cursor:pointer;font-size:26px}
+.menu li .desc{display:block;font-size:17px;color:var(--dim)}
+.menu li.on::before{content:"";position:absolute;left:0;top:9px;width:26px;height:18px;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 9' shape-rendering='crispEdges'%3E%3Cpath fill='%23fff' stroke='%23000' stroke-width='.6' d='M.5 3.5h7v-1h3v1h2v2h-2v1h-1v1h-2v1h-4v-1h-1v-1h-2z'/%3E%3C/svg%3E") no-repeat center/contain;
+  animation:nudge .6s steps(2) infinite}
+@keyframes nudge{50%{transform:translateX(3px)}}
+.menu li:focus-visible{outline:2px dashed var(--label);outline-offset:2px}
+.sep{height:2px;background:linear-gradient(90deg,transparent,var(--edge-dim),transparent);margin:12px 0}
+.opt{display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:21px}
+.opt button{font:inherit;font-size:19px;background:transparent;color:var(--text);border:2px solid var(--edge-dim);border-radius:3px;padding:1px 10px;cursor:pointer;min-width:72px}
+.opt button[aria-pressed=true]{border-color:var(--label);color:var(--label)}
+.opt button:hover{border-color:var(--edge)}
+.big{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.big button{font-family:var(--px);font-size:16px;letter-spacing:.2em;padding:14px 0;border-radius:6px;cursor:pointer;
+  border:3px solid var(--edge);color:#fff;box-shadow:0 4px 0 rgba(0,0,0,.5)}
+.big button:active{transform:translateY(3px);box-shadow:0 1px 0 rgba(0,0,0,.5)}
+.big button:disabled{opacity:.35;cursor:not-allowed;transform:none}
+#startBtn{background:linear-gradient(180deg,#2a8a52,#0b3a20)}
+#stopBtn{background:linear-gradient(180deg,#a8303c,#43080f)}
+.toast{margin-top:12px;font-size:18px;min-height:40px;color:var(--dim)}
+.keys{font-size:16px;color:#5f6894;margin-top:8px}
+
+/* ---------- party ---------- */
+.member{display:grid;grid-template-columns:52px 1fr;gap:12px;align-items:center;padding:6px 0}
+.member+.member{border-top:1px dashed #33408a}
+.face{width:52px;height:52px;border:2px solid var(--edge-dim);border-radius:4px;display:grid;place-items:center;
+  font-family:var(--px);font-size:24px;background:linear-gradient(160deg,#3b4fd0,#0b1150);image-rendering:pixelated}
+.m-top{display:flex;gap:14px;align-items:baseline}
+.m-name{font-size:26px;min-width:90px}
+.bars{display:grid;grid-template-columns:28px 1fr 108px;gap:2px 8px;align-items:center;font-size:20px;margin-top:2px}
+.bar{height:6px;background:#010418;border:1px solid #39449a;position:relative;overflow:hidden}
+.bar i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,var(--hp2),var(--hp1));transition:width .4s}
+.bar.mp i{background:linear-gradient(90deg,var(--mp2),var(--mp1))}
+.bar.low i{background:linear-gradient(90deg,#8a1020,var(--bad))}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+
+/* ---------- status ---------- */
+.kv{display:grid;grid-template-columns:118px 1fr;gap:6px 12px;font-size:21px}
+.kv dd{margin:0;overflow-wrap:anywhere}
+.objective{font-size:24px;color:#fff;margin-bottom:12px;min-height:26px}
+.err{color:var(--bad)}
+
+/* ---------- map ---------- */
+.map canvas{display:block;width:100%;aspect-ratio:4/3;background:#020516;border:1px solid #2b3685;border-radius:3px;image-rendering:pixelated}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:16px;color:var(--dim);margin-top:8px}
+.legend b{display:inline-block;width:10px;height:10px;margin-right:5px;vertical-align:middle}
+
+/* ---------- log ---------- */
+.log ol{list-style:none;margin:0;padding:0;font-size:19px;max-height:360px;overflow:auto}
+.log li{display:grid;grid-template-columns:78px 30px 1fr auto;gap:8px;padding:3px 0;border-bottom:1px dotted #26307a}
+.log .act{text-align:center;color:var(--label)}
+.log .run{color:var(--warn);font-size:15px;margin-left:6px}
+.log .gate{color:var(--dim)}
+.log .ms{color:var(--dim);font-size:16px}
+.empty{color:var(--dim);font-size:18px}
+
+/* ---------- footer boxes ---------- */
+.foot{display:flex;gap:14px}
+.foot .win{flex:1;display:flex;justify-content:space-between;align-items:center;font-size:24px}
+
+@media (max-width:1100px){
+  .app{grid-template-columns:260px 1fr;grid-template-areas:"head head" "cmd party" "cmd status" "map map" "log log" "foot foot"}
+}
+@media (max-width:700px){
+  .app{grid-template-columns:1fr;grid-template-areas:"head" "cmd" "party" "status" "map" "log" "foot"}
+  .foot{flex-direction:column}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="boot" role="presentation">
+  <div class="boot-inner">
+    <div class="gem"><i></i><i></i><i></i></div>
+    <div class="boot-title">LAYA</div>
+    <div class="boot-sub">AUTOPILOT · ATTIS LABS</div>
+    <div class="boot-hint">PRESS ANY KEY</div>
+  </div>
+</div>
+
+<main class="app">
+  <header>
+    <div class="brand">LAYA AUTOPILOT<small>FINAL FANTASY VII · <span id="disc">DISC 1</span></small></div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <button id="crtBtn" class="pill idle" style="background:none;cursor:pointer" aria-pressed="true">CRT</button>
+      <span id="pill" class="pill idle">IDLE</span>
+    </div>
+  </header>
+
+  <section class="win cmd" aria-label="Commands">
+    <h2>Command</h2>
+    <ul class="menu" id="menu" role="listbox" aria-label="Mode">
+      <li role="option" tabindex="0" data-mode="story" class="on">Story<span class="desc">Follow the verified route</span></li>
+      <li role="option" tabindex="-1" data-mode="assist">Assist<span class="desc">Dialogue &amp; menus only</span></li>
+      <li role="option" tabindex="-1" data-mode="observe">Observe<span class="desc">Decide, press nothing</span></li>
+    </ul>
+    <div class="sep"></div>
+    <div class="opt"><span>Run</span><button id="optRun" aria-pressed="true">ON</button></div>
+    <div class="opt"><span>Battle</span><button id="optBattle" aria-pressed="false">OFF</button></div>
+    <div class="opt" title="OFF: objectives only (still looks around when stuck). ON: also talk to everyone once per area."><span>Explore</span><button id="optExplore" aria-pressed="false">OFF</button></div>
+    <div class="opt"><span>Time</span><button id="optTime" aria-pressed="false">∞</button></div>
+    <div class="opt" title="Stop Laya and hand the controller back when anyone's HP falls below this (KO counts)"><span>Stop HP</span><button id="optHp" aria-pressed="false">OFF</button></div>
+    <div class="sep"></div>
+    <div class="label" style="font-family:var(--px);font-size:13px;letter-spacing:.2em">GOALS</div>
+    <div id="goals"><div class="empty" style="font-size:16px">—</div></div>
+    <div class="big">
+      <button id="startBtn">START</button>
+      <button id="stopBtn" disabled>STOP</button>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <div class="keys">↑↓ select · Enter start · Esc stop</div>
+  </section>
+
+  <section class="win party" aria-label="Party"><h2>Party</h2><div id="party"><div class="empty">No save data read yet.</div></div></section>
+
+  <section class="win status" aria-label="Status">
+    <h2>Status</h2>
+    <div class="objective" id="objective">—</div>
+    <dl class="kv">
+      <dt class="label">Doing</dt><dd id="reason">—</dd>
+      <dt class="label">Mode</dt><dd id="mode">—</dd>
+      <dt class="label">Field</dt><dd id="field">—</dd>
+      <dt class="label">Actions</dt><dd id="actions">—</dd>
+      <dt class="label">Think</dt><dd id="think">—</dd>
+    </dl>
+    <div class="err" id="error"></div>
+  </section>
+
+  <section class="win map" aria-label="Field map">
+    <h2>Field <span class="dim" id="mapName"></span></h2>
+    <canvas id="map" width="640" height="480"></canvas>
+    <div class="legend"><span><b style="background:#6fd3ff"></b>Cloud</span><span><b style="background:#ffd54a"></b>Exit</span><span><b style="background:#ff6ad5"></b>Target</span><span><b style="background:#fff"></b>People / objects</span></div>
+  </section>
+
+  <section class="win log" aria-label="Decision log"><h2>Log</h2><ol id="log"><li class="empty">Nothing yet.</li></ol></section>
+
+  <div class="foot">
+    <div class="win"><span class="label">Time</span><span id="clock">00:00:00</span></div>
+    <div class="win"><span class="label">Gil</span><span id="gil">—</span></div>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const GLYPH = {up:'↑',down:'↓',left:'←',right:'→',up_left:'↖',up_right:'↗',down_left:'↙',down_right:'↘',
+  confirm:'◯',cancel:'✕',flee:'⇤',wait:'·'};
+const TIMES = [[0,'∞'],[30,'30s'],[300,'5m'],[1800,'30m']];
+const HPS = [[0,'OFF'],[20,'<20%'],[30,'<30%'],[50,'<50%']];
+let mode = 'story', timeIdx = 0, hpIdx = 0, last = null, mapSig = '', mapData = null, lastStop = null;
+
+/* boot */
+const boot = $('boot');
+const skip = () => { boot.classList.add('gone'); removeEventListener('keydown', skip); };
+addEventListener('keydown', skip); boot.addEventListener('click', skip); setTimeout(skip, 2600);
+
+/* CRT toggle (remembered per browser) */
+try { if (localStorage.getItem('crt') === 'off') document.body.classList.add('no-crt'); } catch {}
+$('crtBtn').onclick = () => {
+  const off = document.body.classList.toggle('no-crt');
+  $('crtBtn').setAttribute('aria-pressed', String(!off));
+  try { localStorage.setItem('crt', off ? 'off' : 'on'); } catch {}
+};
+
+/* menu */
+const items = [...document.querySelectorAll('#menu li')];
+function select(i){ items.forEach((li,j)=>{li.classList.toggle('on',i===j);li.tabIndex=i===j?0:-1;li.setAttribute('aria-selected',i===j)});
+  mode = items[i].dataset.mode; }
+items.forEach((li,i)=>li.addEventListener('click',()=>select(i)));
+addEventListener('keydown', e => {
+  if (!boot.classList.contains('gone')) return;
+  const i = items.findIndex(li=>li.classList.contains('on'));
+  if (e.key==='ArrowDown'){select((i+1)%items.length);items[(i+1)%items.length].focus();e.preventDefault()}
+  if (e.key==='ArrowUp'){select((i+items.length-1)%items.length);items[(i+items.length-1)%items.length].focus();e.preventDefault()}
+  if (e.key==='Enter' && !$('startBtn').disabled && document.activeElement.tagName!=='BUTTON') start();
+  if (e.key==='Escape' && !$('stopBtn').disabled) stop();
+});
+function toggle(btn){ const on = btn.getAttribute('aria-pressed')!=='true'; btn.setAttribute('aria-pressed',on); btn.textContent = on?'ON':'OFF'; }
+$('optRun').onclick = () => toggle($('optRun'));
+$('optBattle').onclick = () => toggle($('optBattle'));
+$('optExplore').onclick = () => toggle($('optExplore'));
+$('optTime').onclick = () => { timeIdx=(timeIdx+1)%TIMES.length; $('optTime').textContent=TIMES[timeIdx][1]; $('optTime').setAttribute('aria-pressed',timeIdx>0); };
+function setHp(i){ hpIdx=i; $('optHp').textContent=HPS[i][1]; $('optHp').setAttribute('aria-pressed',i>0);
+  try { localStorage.setItem('stopHp', String(i)); } catch {} }
+$('optHp').onclick = () => setHp((hpIdx+1)%HPS.length);
+try { const i = Number(localStorage.getItem('stopHp')); if (i>0 && i<HPS.length) setHp(i); } catch {}
+function chime(){ // audible hand-over: the bot has released the controller
+  try { const a = new AudioContext(), o = a.createOscillator(), g = a.createGain();
+    o.frequency.value = 660; g.gain.value = .08; o.connect(g); g.connect(a.destination);
+    o.start(); o.frequency.setValueAtTime(440, a.currentTime+.18); o.stop(a.currentTime+.4); } catch {} }
+
+function toast(msg, bad){ $('toast').textContent = msg; $('toast').style.color = bad ? 'var(--bad)' : 'var(--dim)'; }
+async function post(path, body){
+  const r = await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
+  const j = await r.json().catch(()=>({ok:false,message:'Bad response'}));
+  toast(j.message||'', !j.ok); poll();
+}
+function start(){ $('startBtn').disabled = true; toast('Starting… the model takes a few seconds to load.');
+  post('/api/start',{mode, walk:$('optRun').getAttribute('aria-pressed')!=='true',
+    battle_assist:$('optBattle').getAttribute('aria-pressed')==='true', explore:$('optExplore').getAttribute('aria-pressed')==='true', seconds:TIMES[timeIdx][0],
+    stop_hp:HPS[hpIdx][0]}); }
+function stop(){ post('/api/stop'); }
+$('startBtn').onclick = start; $('stopBtn').onclick = stop;
+
+/* render */
+const fmt = n => n==null ? '—' : Number(n).toLocaleString();
+function hms(s){ s=Math.max(0,Math.floor(s)); return [s/3600,s%3600/60,s%60].map(v=>String(Math.floor(v)).padStart(2,'0')).join(':'); }
+function render(s){
+  last = s;
+  const st = s.stopping ? 'stopping' : s.running ? s.status : (['blocked','error'].includes(s.status) ? s.status : (s.status==='idle'?'idle':'stopped'));
+  const lowHp = !s.running && s.stop_kind === 'low_hp';
+  $('pill').className = 'pill '+(st==='stopping'||lowHp||s.attention?'blocked':st); $('pill').textContent = s.attention ? (s.attention==='goal'?'GOAL':'YOUR TURN') : lowHp ? 'LOW HP' : st.toUpperCase();
+  if (s.attention && !window._alerted){ window._alerted = true; try{ const a=new AudioContext(), o=a.createOscillator(); o.type='square'; o.frequency.value=660; o.connect(a.destination); o.start(); o.stop(a.currentTime+0.25);}catch{} }
+  if (!s.attention) window._alerted = false;
+  const stopSig = lowHp ? s.finished || s.reason : null;
+  if (stopSig && lastStop !== null && stopSig !== lastStop) { chime(); toast('Low HP: Laya stopped. Take the controller.', true); }
+  lastStop = stopSig || '';
+  $('startBtn').disabled = s.running; $('stopBtn').disabled = !s.running || s.stopping;
+  $('disc').textContent = 'DISC '+(s.disc||1);
+  $('objective').textContent = s.objective || (s.running ? 'Working…' : 'Pick a command and press START.');
+  $('reason').textContent = s.reason || '—';
+  $('mode').textContent = s.mode ? s.mode + (s.execute===false?' (observe)':'') : '—';
+  $('field').textContent = s.field_name ? `${s.field_name} · #${s.field_id}` : '—';
+  $('mapName').textContent = s.field_name ? '· '+s.field_name : '';
+  $('actions').textContent = s.actions_sent!=null ? fmt(s.actions_sent)+' sent' : '—';
+  $('think').textContent = s.median_ms ? Math.round(s.median_ms)+' ms / decision' : '—';
+  $('error').textContent = s.error || '';
+  $('gil').textContent = fmt(s.gil);
+  const since = s.started ? ((s.running ? s.now : (s.finished||s.now)) - s.started) : 0;
+  $('clock').textContent = hms(since);
+
+  const gs = s.goals||[]; const gsig = JSON.stringify(gs);
+  if (gsig !== window._gsig){ window._gsig = gsig;
+    $('goals').innerHTML = gs.length ? gs.map(g=>`<div class="opt" title="${esc(g.note)}"><span>${g.done?'✓ ':''}${esc(g.label)}</span>${g.done?'<span class="dim" style="font-size:16px">DONE</span>':`<button data-goal="${esc(g.id)}" aria-pressed="${g.enabled}">${g.enabled?'ON':'OFF'}</button>`}</div>`).join('') : '<div class="empty" style="font-size:16px">No goals in goals.json.</div>';
+    $('goals').querySelectorAll('button[data-goal]').forEach(b=>b.onclick=()=>post('/api/goals',{id:b.dataset.goal, enabled:b.getAttribute('aria-pressed')!=='true'}));
+  }
+  $('party').innerHTML = (s.party||[]).length ? s.party.map(p=>{
+    const hp = p.max_hp ? p.hp/p.max_hp : 0, mp = p.max_mp ? p.mp/p.max_mp : 0;
+    return `<div class="member"><div class="face">${esc(p.name[0])}</div><div>
+      <div class="m-top"><span class="m-name">${esc(p.name)}</span><span class="label">LV</span><span>${p.level}</span></div>
+      <div class="bars"><span class="label">HP</span><div class="bar${hp<((HPS[hpIdx][0]||30)/100)?' low':''}"><i style="width:${hp*100}%"></i></div><span class="num">${p.hp}/${p.max_hp}</span>
+      <span class="label">MP</span><div class="bar mp"><i style="width:${mp*100}%"></i></div><span class="num">${p.mp}/${p.max_mp}</span></div></div></div>`;
+  }).join('') : '<div class="empty">No save data read yet.</div>';
+
+  const d = (s.decisions||[]).slice().reverse();
+  $('log').innerHTML = d.length ? d.map(e=>{
+    const t = e.time ? new Date(e.time*1000).toLocaleTimeString([], {hour12:false}) : '';
+    return `<li><span class="dim">${t.slice(0,8)}</span><span class="act ${e.source==='state_gate'?'gate':''}">${GLYPH[e.action]||'?'}</span>
+      <span>${esc(e.reason)}${e.run?'<span class="run">RUN</span>':''}</span><span class="ms">${e.ms?Math.round(e.ms)+'ms':''}</span></li>`;
+  }).join('') : '<li class="empty">Nothing yet.</li>';
+}
+function offline(){ $('pill').className='pill offline'; $('pill').textContent='NO LINK'; $('startBtn').disabled=$('stopBtn').disabled=true;
+  $('objective').textContent='Control panel server is not running. Run Start-UI.ps1.'; }
+
+/* map */
+const cv = $('map'), cx = cv.getContext('2d');
+function drawMap(){
+  const m = mapData; const W = cv.width, H = cv.height;
+  cx.fillStyle='#020516'; cx.fillRect(0,0,W,H);
+  if (!m || !m.mesh.length){ cx.fillStyle='#5b6490'; cx.font='22px VT323, monospace'; cx.fillText('No walkmesh for this screen.',20,40); return; }
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  m.mesh.forEach(t=>t.slice(0,3).forEach(([x,y])=>{x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y)}));
+  const pad=24, k=Math.min((W-2*pad)/(x1-x0||1),(H-2*pad)/(y1-y0||1));
+  const ox=(W-(x1-x0)*k)/2, oy=(H-(y1-y0)*k)/2;
+  const P = ([x,y]) => [ox+(x-x0)*k, H-(oy+(y-y0)*k)];  // +Y drawn upward
+  m.mesh.forEach(t=>{ cx.beginPath(); t.slice(0,3).forEach((v,i)=>{const [a,b]=P(v); i?cx.lineTo(a,b):cx.moveTo(a,b)}); cx.closePath();
+    cx.fillStyle = t[3] ? 'rgba(255,92,108,.18)' : 'rgba(40,70,200,.35)'; cx.fill();
+    cx.strokeStyle='rgba(120,150,255,.35)'; cx.lineWidth=1; cx.stroke(); });
+  m.gateways.forEach(g=>{ const [a,b]=g.line.map(P); cx.strokeStyle='#ffd54a'; cx.lineWidth=4; cx.beginPath(); cx.moveTo(...a); cx.lineTo(...b); cx.stroke();
+    cx.fillStyle='#ffd54a'; cx.font='16px VT323, monospace'; cx.fillText('→'+g.to,(a[0]+b[0])/2+6,(a[1]+b[1])/2-6); });
+  cx.font='15px VT323, monospace';
+  m.actors.forEach(a=>{ const [x,y]=P(a.pos); cx.fillStyle='#fff'; cx.fillRect(x-3,y-3,6,6); cx.fillStyle='#c9cff0'; cx.fillText(a.name,x+6,y-4); });
+  const blink = Math.floor(performance.now()/400)%2;
+  if (m.target && m.target[0]!=null){ const [x,y]=P(m.target); const r=8+4*Math.sin(performance.now()/200);
+    cx.strokeStyle='#ff6ad5'; cx.lineWidth=2; cx.beginPath(); cx.arc(x,y,r,0,7); cx.stroke();
+    if (m.player && m.player[0]!=null){ const [px,py]=P(m.player); cx.setLineDash([4,4]); cx.beginPath(); cx.moveTo(px,py); cx.lineTo(x,y); cx.stroke(); cx.setLineDash([]); } }
+  if (m.player && m.player[0]!=null){ const [x,y]=P(m.player); cx.fillStyle= blink ? '#6fd3ff' : '#e9fbff';
+    cx.beginPath(); cx.moveTo(x,y-9); cx.lineTo(x+7,y+6); cx.lineTo(x-7,y+6); cx.closePath(); cx.fill(); }
+}
+function frame(){ drawMap(); requestAnimationFrame(frame); }
+
+async function poll(){
+  try { const r = await fetch('/api/status',{cache:'no-store'}); render(await r.json()); }
+  catch { offline(); }
+}
+async function pollMap(){
+  try { mapData = await (await fetch('/api/map',{cache:'no-store'})).json(); } catch {}
+}
+poll(); pollMap(); setInterval(poll, 500); setInterval(pollMap, 700); requestAnimationFrame(frame);
+</script>
+</body>
+</html>

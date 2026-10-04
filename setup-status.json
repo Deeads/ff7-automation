@@ -1,0 +1,45 @@
+{
+  "objective": "Continue the latest FF7 save through the entire game",
+  "status": "Limited story bot implemented; live test obtained Keycard 65. Full-game automation remains incomplete.",
+  "python": "C:\\Users\\david\\.codex\\visualizations\\2026\\09\\27\\01a0e380-1d71-7280-838d-fe72d672a9ff\\ff7-automation\\.venv\\Scripts\\python.exe",
+  "laya_version": "0.3.20",
+  "laya_import_verified": true,
+  "standalone_bot_implemented": true,
+  "emulator_executable": "C:\\Users\\david\\AppData\\Local\\Programs\\DuckStation\\duckstation-qt-x64-ReleaseLTCG.exe",
+  "emulator_data": "C:\\Users\\david\\AppData\\Local\\DuckStation",
+  "game_state": "FF7 on Shinra floor 65 with Keycard 65; automation stopped at unsupported objective and controller released.",
+  "backup_directory": "C:\\Users\\david\\.codex\\visualizations\\2026\\09\\27\\01a0e380-1d71-7280-838d-fe72d672a9ff\\ff7-automation\\backup-before-automation",
+  "observed_disc_files": [
+    "C:\\Users\\david\\Downloads\\gam\\Final Fantasy VII (USA) (Disc 1).cue"
+  ],
+  "macros": {
+    "2": "Cross hold toggle",
+    "4": "Right and Circle toggle, frequency 50 frames",
+    "3": "Left and Circle toggle, frequency 50 frames",
+    "1": "Circle toggle, frequency 40 frames",
+    "5": "Circle toggle, frequency 1 frame"
+  },
+  "next_work": [
+    "Complete routes after Shinra floors 61-65",
+    "Validate live battles and implement full combat strategy",
+    "Locate user-provided Disc 2/3 and complete actual switching"
+  ],
+  "virtual_controller_test": {
+    "vgamepad_version": "0.1.0",
+    "driver_version": "1.17.333.0",
+    "xinput_press_verified": true,
+    "release_verified": true,
+    "foreground_unchanged": true,
+    "keyboard_events_sent": 0,
+    "mouse_events_sent": 0,
+    "game_response_verified": true,
+    "profile": "ff7-background-test",
+    "duckstation_mapping_verified": true,
+    "test_session_stopped": true,
+    "verification": "User confirmed successful Menu response after retry; controller events report foreground_unchanged=true"
+  },
+  "laya_loop_implemented": true,
+  "model_weights_downloaded": true,
+  "full_game_route_implemented": false,
+  "laya_validation": "40 tests pass. Live story test obtained Keycard 65 and reached floor 65. NPC avoidance, stair clearance, diagonal movement, and hidden launch verified. Foreground unchanged during every sent action in the verified runs."
+}

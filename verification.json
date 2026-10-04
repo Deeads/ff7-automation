@@ -1,0 +1,157 @@
+{
+  "date": "2026-09-29",
+  "unit_tests_passed": 118,
+  "live_loop": {
+    "game": "FF7 USA Disc 1",
+    "field_id": 242,
+    "model": "local Laya 0.3.20",
+    "action": "right",
+    "choice_probability": 0.8993,
+    "inference_ms": 485,
+    "controller": "persistent vgamepad Xbox360",
+    "foreground_unchanged": true,
+    "before": [
+      777.77,
+      49.758,
+      0
+    ],
+    "after": [
+      793.77,
+      49.758,
+      0
+    ],
+    "target": [
+      805,
+      50
+    ],
+    "target_radius": 12,
+    "target_reached": true,
+    "released_after_action": true
+  },
+  "scope": "Read-only state extraction, offline Laya finite-choice inference, persistent background controller, walkmesh navigation with NPC avoidance, keycards 62/65 story objectives, disc-image validator/playlist preparation.",
+  "unfinished": [
+    "full-game story route after the implemented Shinra segment",
+    "live-validated battle state and complete combat strategy",
+    "later puzzles, world-map travel, and minigames",
+    "automatic disc switching; Disc 2 and 3 files still unavailable"
+  ],
+  "story_live_test": {
+    "date": "2026-09-29",
+    "route": "Floor 62, around Hatt, to Mayor Domino and back out",
+    "keycard_62_present": true,
+    "keycard_65_obtained": true,
+    "actions_sent": 242,
+    "foreground_unchanged_for_all_sent_actions": true,
+    "median_inference_ms": 407,
+    "controller_released": true
+  },
+  "hidden_launcher_live_test": {
+    "started_hidden": true,
+    "reached_field_ids": [
+      247,
+      248
+    ],
+    "actions_sent": 28,
+    "foreground_unchanged_for_all_sent_actions": true,
+    "final_status": "blocked",
+    "controller_released": true,
+    "median_inference_ms": 406.0
+  },
+  "navigation_live_fixes": [
+    "Avoided Hatt on floor 62 and obtained Keycard 65",
+    "Crossed from floor 62 to floor 63",
+    "Fixed body clearance against floor 63 stair walls; crossed to floor 64",
+    "Diagonal movement cleared floor 64 corner and reached floor 65; stopped at unsupported story objective"
+  ],
+  "manual_stop_test": {
+    "status": "stopped",
+    "controller_released": true,
+    "actions_sent": 0
+  },
+  "held_movement_live_test": {
+    "date": "2026-09-29",
+    "launcher": "Start-Laya.ps1 -Seconds 45 (hidden)",
+    "fields": [
+      248,
+      249
+    ],
+    "executor_runs": 6,
+    "state_checks": 625,
+    "run_checks": 609,
+    "longest_hold_s": 7.388,
+    "intermediate_releases": 0,
+    "stalls": 0,
+    "ends": [
+      "Gameplay mode or field changed.",
+      "Arrived at interaction or waypoint."
+    ],
+    "walked_last_stretch_before_inspect": true,
+    "laya_model_decisions": 14,
+    "median_inference_ms": 547.0,
+    "foreground_unchanged_for_all_sent_actions": true,
+    "final_status": "stopped",
+    "controller_released": true,
+    "observed_side_effect": "placed one Midgar part on 249 and collected PARTE on 248 during the run; full puzzle not yet verified",
+    "known_issue": "direction_changes high (up to 85 in 7.4 s): planner alternates between adjacent directions; no release, but no hysteresis yet"
+  },
+  "midgar_puzzle_live": {
+    "date": "2026-09-29",
+    "placed_all_five": true,
+    "midgar_placed": 248,
+    "observed": "final part E placed at triangle 26 via verified dialogue answer; bot then left 249 toward Keycard 66",
+    "keycard_66": false,
+    "stopped_by": "random battle on field 248 (battle assist disabled)"
+  },
+  "field_script_scanner": {
+    "disc1_fields_scanned": 787,
+    "treasures_found": 276,
+    "save_points_found": 6,
+    "parse_failures": "7 real fields + 77 empty dummy sections; live path degrades to no collection",
+    "model_room_disassembly_match": "217/217 reference lines",
+    "live_chest_collection_verified": false
+  },
+  "route_table": {
+    "date": "2026-09-29",
+    "file": "routes/shinra_hq.json",
+    "steps": 31,
+    "live_verified_steps": "floors 61-65 (source \"live\"); Midgar puzzle placement only",
+    "script_only_steps": "floor 66 restroom/vent/duct/eavesdrop, floors 67-68, Keycard 68, jail through the blood trail",
+    "intentionally_blocked": [
+      "progress 275 on field 256 (ambiguous exits)",
+      "jail party formation menu and later"
+    ],
+    "live_test": "not run: after the floor 65 battle DuckStation no longer exposed a verified FF7 RAM mapping (title/game-over or not loaded)"
+  },
+  "battle_decode_live": {
+    "date": "2026-09-29",
+    "battles": [
+      429
+    ],
+    "samples": 56,
+    "players": "validated: battle max HP == save-record max HP in all 56 samples; on-screen HP matched decode (Cloud 419/688 and 501/688, Tifa 128/590) in PrintWindow captures",
+    "enemies": "validated: max HP matches Disc 1 SCENE.BIN (Hammer Blaster id 53 = 210, Sword Dance id 55 = 160 seen in an earlier battle)",
+    "caveat": "untargetable helper units (e.g. id 54, 10 HP, empty name) decode as living enemies; battle ended with them \"alive\"",
+    "escape_counter_observed": 1,
+    "menu_cursor_probe": "not yet successful: first probe ran during the battle-opening transition (no menu); retry-after-3s logic added, unverified",
+    "basic_confirm_assist": "Circle presses (Attack, default target) defeated the remaining Hammer Blaster; Tifa was KO'd during the fight",
+    "bugs_found_live": [
+      "0.3 s L1+R1 tap never escapes (now 3 s hold, max 2 tries/battle, then attack)",
+      "no-progress guard aborted mid-battle leaving the party idle (disabled in battle)",
+      "critical HP in an inescapable battle waited instead of attacking (now attacks)"
+    ]
+  },
+  "game_over_2026_09_29": "Floor 65 random battle with battle assist disabled and no player input led to a party wipe; save reloaded to floor 62.",
+  "ghost_enemies": {
+    "date": "2026-09-29",
+    "evidence": "battle 429: retracted Hammer Blaster (slot 6, 108 HP) lacked unit flag 0x0008 from 32.8 s to 62.1 s; capture shows no enemy on screen and Tifa HP fell 469->128 while Circle was mashed; helper parts (id 54) never have 0x0008",
+    "fix": "enemy targetable = alive and flags&0x0008 and not flags&0x4000; no Circle while nothing is targetable, Cross backs out of an open target menu",
+    "replay_test": "fixtures/battle-log-429-hammer-blaster.jsonl: 0 confirms offered in the ghost window",
+    "live_retest": "pending"
+  },
+  "post_battle_screens": {
+    "date": "2026-09-29",
+    "evidence": "EXP/AP results screen reads as field request with null walkmesh pointer (fixtures/ram-battle-results.bin); no reliable positive signature found",
+    "fix": "after a battle, until field/dialog/menu returns: Circle every 0.7 s (max 60 s); all save HP 0 = game over -> blocked, no presses",
+    "live_retest": "pending"
+  }
+}

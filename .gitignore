@@ -1,0 +1,37 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Local model weights (multi-GB, downloaded at runtime)
+models/
+
+# Game data: RAM dumps, memory cards and save files are Square Enix's, not ours
+*.bin
+*.mcd
+*.sav
+*.bak
+backup-before-automation/
+battle-captures/
+
+# Run output / logs / session state
+*.jsonl
+*.log
+*.lock
+live-state.json
+laya-status.json
+background-test-result.json
+battle-menu-probe.json
+controller-test-command.json
+STOP
+
+# Third-party installers (link to them in the README instead)
+*.exe
+*.msi
+
+# Extracted game field files (Square Enix data)
+*.evt
+# Third-party source/notes (DuckStation, FF7 decomp/TAS projects, savemap docs).
+# Credit these in the README rather than re-hosting other people's code.
+reference/

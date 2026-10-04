@@ -1,0 +1,13 @@
+{
+  "goals": [
+    {
+      "id": "vincent",
+      "label": "Recruit Vincent Valentine",
+      "enabled": true,
+      "done_when": {"phs_visible": "Vincent"},
+      "area_prefixes": ["sinbil", "sinin"],
+      "area_label": "the Shinra Mansion in Nibelheim",
+      "note": "Not missable: he can be recruited any time after Nibelheim, on any disc. Needs the Basement Key from the mansion's safe (the Lost Number fight), then talk to him in the coffin room."
+    }
+  ]
+}
