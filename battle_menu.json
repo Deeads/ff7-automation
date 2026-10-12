@@ -1,0 +1,53 @@
+{
+  "adapter": "ff7-us-native-v1",
+  "verified": true,
+  "kernel_hash": "2e9e460274da2383970500a7490bab98f5652752b67dbea630c3e72c9b460106",
+  "capabilities": [
+    "attack",
+    "magic",
+    "item",
+    "limit"
+  ],
+  "date": "2026-10-11",
+  "evidence": {
+    "actor": "Triangle cycled slots 2,0,1,2 at 0xF38A0.",
+    "command_cursor": "Down/up toggled row 0/1 at 0xF92FF for actor 1 and 0xF953F for actor 2; stride 0x240.",
+    "magic": "Actor 1 Cure phase 6, actor 0 Bolt phase 6; first-page selection verified.",
+    "target": "0xF38A9 matched visible Tifa/Red XIII pointer and observed HP/MP outcomes.",
+    "Cure": {
+      "action": "Cure",
+      "actor": 1,
+      "target": 2,
+      "before": {
+        "0": 430,
+        "1": 402,
+        "2": 370
+      },
+      "after": {
+        "0": 430,
+        "1": 402,
+        "2": 717
+      },
+      "mp_before": 101,
+      "mp_after": 96
+    },
+    "Bolt": {
+      "action": "Bolt",
+      "actor": 0,
+      "target": 4,
+      "enemy_hp_before": 260,
+      "enemy_hp_after": 0,
+      "mp_before": 126,
+      "mp_after": 122
+    },
+    "item": "Phase 5; cursor struct 1 (+2 scroll, +0xB row) indexes the battle item array at 0x1671B8; scroll 9 + row 2 selected id 1. Potion on slot 2: HP 632 -> 717, array slot emptied.",
+    "limit": "Phase 24; first Limit confirmed, selected command 20. Red XIII Sled Fang on slot 4: enemy HP 210 -> 0.",
+    "limit_reels": "Phase 27 with selected command 20 is Tifa's slot reels: the bot waited there until Circle was sent; Beat Rush then hit slot 5 for 204 -> 38."
+  },
+  "limits": [
+    "Single-target spells on the first visible page",
+    "Only the first Limit in the list; reels are stopped, not timed",
+    "Support Limits (party cursor) and Limits of characters other than Tifa and Red XIII not live-verified",
+    "Phoenix Down on a KO ally, Hi-Potion use, spell scrolling not live-verified"
+  ]
+}

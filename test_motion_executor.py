@@ -255,7 +255,7 @@ class LoopDecisionPointTests(unittest.TestCase):
                  patch.object(laya_loop, 'choices_for', return_value=({'wait': '', 'right': ''}, 'Follow the walkmesh path.')), \
                  patch.object(laya_loop, 'guard', return_value=None), \
                  patch.object(laya_loop, 'drive', side_effect=fake_drive), patch('builtins.print'):
-                laya_loop.main(['--story', '--execute', '--seconds', '0'])
+                laya_loop.main(['--story', '--execute', '--seconds', '0', '--policy', 'laya'])
             entries = [json.loads(l) for l in (root/'decisions.jsonl').read_text().splitlines()]
         self.assertEqual([e['source'] for e in entries], ['laya', 'executor', 'laya', 'executor'])
         self.assertEqual(Policy.calls, 2)

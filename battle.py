@@ -43,13 +43,15 @@ def decode_battle(data):
     for unit in players:
         unit['limit_ready'] = bool(limit_mask >> unit['slot'] & 1)
     escape = u16(0xF7DB2)
-    return dict(id=u16(0x707BC), players=players, enemies=enemies,
+    result = dict(id=u16(0x707BC), players=players, enemies=enemies,
                 menu_state=struct.unpack_from('<h', data, 0xF3896)[0],
                 escape_difficulty=escape, escapable=escape < INESCAPABLE,
                 limit_mask=limit_mask, dead_mask=dead_mask, result_flags=u16(0x707BE),
                 raw={unit['slot']: data[0xF83E0+unit['slot']*0x68:0xF83E0+unit['slot']*0x68+0x68].hex()
                      for unit in players+enemies},
                 validation='player HP/max HP cross-checked live against save records; enemy HP pending')
+    from battle_data import enrich
+    return enrich(data, result)
 
 
 def validate_players(battle, party):
@@ -71,6 +73,12 @@ def battle_choices(state, enabled=False):
         return choices, 'Battle detected; experimental battle assist is not enabled.'
     if not battle or not battle['players']:
         return choices, 'Waiting for valid battle records.'
+    if 'control_input' in battle:
+        if battle['control_input']:
+            choices[battle['control_input']] = battle['control_reason']
+        return choices, battle['control_reason']
+    if battle.get('advanced_configured') and not battle.get('menu'):
+        return choices, 'Advanced tactics: waiting for a valid actor and battle menu.'
     if battle.get('menu'):
         # Verified cursor map: strategy + feedback navigation.
         from battle_strategy import choose

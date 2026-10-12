@@ -1,0 +1,2 @@
+# Core automation needs only the controller package; Laya/Torch are optional.
+vgamepad==0.1.0

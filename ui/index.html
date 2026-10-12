@@ -45,6 +45,13 @@ body.no-crt::after{display:none}
 .win h2{margin:0 0 10px;font-family:var(--px);font-weight:600;font-size:15px;letter-spacing:.2em;color:var(--label);text-transform:uppercase}
 .label{color:var(--label)}
 .dim{color:var(--dim)}
+.disc-row{font-size:18px;margin:8px 0;line-height:1.25}
+.disc-row summary{cursor:pointer}
+.disc-row input{width:100%;min-width:0;margin:7px 0;padding:7px;background:#050b30;color:var(--text);border:1px solid var(--edge-dim);font:14px monospace}
+.disc-row button{font:inherit;color:var(--text);background:#15275a;border:1px solid var(--edge-dim);padding:4px 10px;cursor:pointer}
+.disc-row .available{color:var(--ok)}
+.disc-row .missing{color:var(--dim)}
+#discNotice{font-size:18px;line-height:1.3;color:var(--warn);margin:10px 0}
 
 /* ---------- layout ---------- */
 .app{max-width:1360px;margin:0 auto;padding:18px 16px 28px;display:grid;gap:14px;
@@ -56,7 +63,7 @@ header{grid-area:head;display:flex;align-items:center;gap:14px;justify-content:s
 .pill{font-family:var(--px);font-size:14px;letter-spacing:.2em;padding:8px 14px;border:2px solid currentColor;border-radius:4px}
 .pill.running{color:var(--ok);animation:pulse 1.4s ease-in-out infinite}
 .pill.idle,.pill.stopped{color:var(--dim)} .pill.blocked{color:var(--warn)} .pill.error,.pill.offline{color:var(--bad)}
-.pill.loading{color:var(--label)}
+.pill.loading,.pill.waiting{color:var(--label)}
 @keyframes pulse{50%{box-shadow:0 0 14px currentColor}}
 .cmd{grid-area:cmd} .party{grid-area:party} .status{grid-area:status} .map{grid-area:map} .log{grid-area:log} .foot{grid-area:foot}
 
@@ -101,6 +108,7 @@ header{grid-area:head;display:flex;align-items:center;gap:14px;justify-content:s
 /* ---------- status ---------- */
 .kv{display:grid;grid-template-columns:118px 1fr;gap:6px 12px;font-size:21px}
 .kv dd{margin:0;overflow-wrap:anywhere}
+#reason{white-space:pre-line}
 .objective{font-size:24px;color:#fff;margin-bottom:12px;min-height:26px}
 .err{color:var(--bad)}
 
@@ -154,25 +162,38 @@ header{grid-area:head;display:flex;align-items:center;gap:14px;justify-content:s
   <section class="win cmd" aria-label="Commands">
     <h2>Command</h2>
     <ul class="menu" id="menu" role="listbox" aria-label="Mode">
-      <li role="option" tabindex="0" data-mode="story" class="on">Story<span class="desc">Follow the verified route</span></li>
+      <li role="option" tabindex="0" data-mode="story" class="on">Story<span class="desc">Routes &amp; field exploration</span></li>
       <li role="option" tabindex="-1" data-mode="assist">Assist<span class="desc">Dialogue &amp; menus only</span></li>
+      <li role="option" tabindex="-1" data-mode="grind">Grind<span class="desc">Random battles, heal &amp; rest</span></li>
       <li role="option" tabindex="-1" data-mode="observe">Observe<span class="desc">Decide, press nothing</span></li>
     </ul>
     <div class="sep"></div>
     <div class="opt"><span>Run</span><button id="optRun" aria-pressed="true">ON</button></div>
-    <div class="opt"><span>Battle</span><button id="optBattle" aria-pressed="false">OFF</button></div>
+    <div class="opt"><span>Battle</span><button id="optBattle" aria-pressed="true">ON</button></div>
     <div class="opt" title="OFF: objectives only (still looks around when stuck). ON: also talk to everyone once per area."><span>Explore</span><button id="optExplore" aria-pressed="false">OFF</button></div>
     <div class="opt"><span>Time</span><button id="optTime" aria-pressed="false">∞</button></div>
     <div class="opt" title="Stop Laya and hand the controller back when anyone's HP falls below this (KO counts)"><span>Stop HP</span><button id="optHp" aria-pressed="false">OFF</button></div>
     <div class="sep"></div>
     <div class="label" style="font-family:var(--px);font-size:13px;letter-spacing:.2em">GOALS</div>
     <div id="goals"><div class="empty" style="font-size:16px">—</div></div>
+    <div class="sep"></div>
+    <div class="label" style="font-family:var(--px);font-size:13px;letter-spacing:.2em">SAVE STATES</div>
+    <div class="opt"><span>Milestones</span><button id="optCheckpoints" aria-pressed="true">ON</button></div>
+    <div class="opt"><span>Checkpoint</span><button id="saveCheckpoint">SAVE NOW</button></div>
+    <div id="checkpointNotice" class="dim" role="status" aria-live="polite" style="font-size:16px;line-height:1.2"></div>
+    <div id="checkpointHistory" style="font-size:16px;line-height:1.3;overflow-wrap:anywhere"></div>
+    <div class="sep"></div>
+    <div class="label" style="font-family:var(--px);font-size:13px;letter-spacing:.2em">GAME DISCS</div>
+    <div id="discs"><span class="dim">Checking files…</span></div>
+    <div class="dim" style="font-size:16px;line-height:1.2">Disc 1 is enough to start. Add later discs when you need them.</div>
+    <div id="discNotice" role="status" aria-live="polite" hidden></div>
     <div class="big">
       <button id="startBtn">START</button>
       <button id="stopBtn" disabled>STOP</button>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <div class="keys">↑↓ select · Enter start · Esc stop</div>
+    <p class="dim" style="font-size:17px;line-height:1.2">Partial story support. Unknown choices, world travel and minigames need your input. Connection and save loading recover automatically.</p>
   </section>
 
   <section class="win party" aria-label="Party"><h2>Party</h2><div id="party"><div class="empty">No save data read yet.</div></div></section>
@@ -233,6 +254,7 @@ function select(i){ items.forEach((li,j)=>{li.classList.toggle('on',i===j);li.ta
 items.forEach((li,i)=>li.addEventListener('click',()=>select(i)));
 addEventListener('keydown', e => {
   if (!boot.classList.contains('gone')) return;
+  if (['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) return;
   const i = items.findIndex(li=>li.classList.contains('on'));
   if (e.key==='ArrowDown'){select((i+1)%items.length);items[(i+1)%items.length].focus();e.preventDefault()}
   if (e.key==='ArrowUp'){select((i+items.length-1)%items.length);items[(i+items.length-1)%items.length].focus();e.preventDefault()}
@@ -248,10 +270,6 @@ function setHp(i){ hpIdx=i; $('optHp').textContent=HPS[i][1]; $('optHp').setAttr
   try { localStorage.setItem('stopHp', String(i)); } catch {} }
 $('optHp').onclick = () => setHp((hpIdx+1)%HPS.length);
 try { const i = Number(localStorage.getItem('stopHp')); if (i>0 && i<HPS.length) setHp(i); } catch {}
-function chime(){ // audible hand-over: the bot has released the controller
-  try { const a = new AudioContext(), o = a.createOscillator(), g = a.createGain();
-    o.frequency.value = 660; g.gain.value = .08; o.connect(g); g.connect(a.destination);
-    o.start(); o.frequency.setValueAtTime(440, a.currentTime+.18); o.stop(a.currentTime+.4); } catch {} }
 
 function toast(msg, bad){ $('toast').textContent = msg; $('toast').style.color = bad ? 'var(--bad)' : 'var(--dim)'; }
 async function post(path, body){
@@ -259,30 +277,44 @@ async function post(path, body){
   const j = await r.json().catch(()=>({ok:false,message:'Bad response'}));
   toast(j.message||'', !j.ok); poll();
 }
-function start(){ $('startBtn').disabled = true; toast('Starting… the model takes a few seconds to load.');
+function start(){ $('startBtn').disabled = true; toast('Connecting to FF7… load your save in the emulator.');
   post('/api/start',{mode, walk:$('optRun').getAttribute('aria-pressed')!=='true',
     battle_assist:$('optBattle').getAttribute('aria-pressed')==='true', explore:$('optExplore').getAttribute('aria-pressed')==='true', seconds:TIMES[timeIdx][0],
     stop_hp:HPS[hpIdx][0]}); }
 function stop(){ post('/api/stop'); }
 $('startBtn').onclick = start; $('stopBtn').onclick = stop;
+$('optCheckpoints').onclick=()=>post('/api/checkpoints',{enabled:$('optCheckpoints').getAttribute('aria-pressed')!=='true'});
+$('saveCheckpoint').onclick=()=>post('/api/checkpoints',{action:'save'});
 
 /* render */
 const fmt = n => n==null ? '—' : Number(n).toLocaleString();
 function hms(s){ s=Math.max(0,Math.floor(s)); return [s/3600,s%3600/60,s%60].map(v=>String(Math.floor(v)).padStart(2,'0')).join(':'); }
 function render(s){
   last = s;
+  const cp=s.checkpoints||{}, cs=cp.status||{};
+  $('optCheckpoints').setAttribute('aria-pressed',String(cp.enabled!==false));
+  $('optCheckpoints').textContent=cp.enabled===false?'OFF':'ON';
+  $('saveCheckpoint').disabled=!cp.ready||(['saving','pending'].includes(cs.status)&&Date.now()/1000-(cs.time||0)<30);
+  $('checkpointNotice').textContent=!cp.ready?cp.notice:(cs.message||cp.notice||'');
+  $('checkpointHistory').innerHTML=(cp.recent||[]).map(e=>`<div title="${esc(e.file)}">${e.available?'✓':'Missing file:'} ${esc(e.label)} · ${esc(new Date(e.saved_at*1000).toLocaleString())}</div>`).join('')+
+    `<div class="dim">${fmt(cp.count||0)} saved · ${esc(cp.directory||'checkpoints/')}<br>Restore through DuckStation → Load State → From File.</div>`;
   const st = s.stopping ? 'stopping' : s.running ? s.status : (['blocked','error'].includes(s.status) ? s.status : (s.status==='idle'?'idle':'stopped'));
   const lowHp = !s.running && s.stop_kind === 'low_hp';
   $('pill').className = 'pill '+(st==='stopping'||lowHp||s.attention?'blocked':st); $('pill').textContent = s.attention ? (s.attention==='goal'?'GOAL':'YOUR TURN') : lowHp ? 'LOW HP' : st.toUpperCase();
-  if (s.attention && !window._alerted){ window._alerted = true; try{ const a=new AudioContext(), o=a.createOscillator(); o.type='square'; o.frequency.value=660; o.connect(a.destination); o.start(); o.stop(a.currentTime+0.25);}catch{} }
-  if (!s.attention) window._alerted = false;
   const stopSig = lowHp ? s.finished || s.reason : null;
-  if (stopSig && lastStop !== null && stopSig !== lastStop) { chime(); toast('Low HP: Laya stopped. Take the controller.', true); }
+  if (stopSig && lastStop !== null && stopSig !== lastStop) toast('Low HP: Laya stopped. Take the controller.', true);
   lastStop = stopSig || '';
   $('startBtn').disabled = s.running; $('stopBtn').disabled = !s.running || s.stopping;
   $('disc').textContent = 'DISC '+(s.disc||1);
-  $('objective').textContent = s.objective || (s.running ? 'Working…' : 'Pick a command and press START.');
-  $('reason').textContent = s.reason || '—';
+  const discs = s.discs || []; const discSig = JSON.stringify(discs);
+  if (discSig !== window._discSig){ window._discSig = discSig;
+    $('discs').innerHTML = discs.map(d=>`<details class="disc-row"><summary>Disc ${d.disc} · <span class="${d.available?'available':'missing'}">${d.available?'Available':d.status==='invalid'?'Invalid image':'Missing'}</span></summary><label for="discPath${d.disc}" class="dim">Local CUE, BIN or ISO path</label><input id="discPath${d.disc}" value="${esc(d.path||'')}" placeholder="C:\\Games\\FF7 Disc ${d.disc}.cue" autocomplete="off" spellcheck="false"><button data-add-disc="${d.disc}">${d.available?'Update':'Add disc'}</button>${d.error?`<p class="dim">${esc(d.error)}</p>`:''}</details>`).join('');
+    $('discs').querySelectorAll('button[data-add-disc]').forEach(b=>b.onclick=()=>post('/api/discs',{disc:Number(b.dataset.addDisc),path:$('discPath'+b.dataset.addDisc).value}));
+  }
+  $('discNotice').hidden = !s.disc_notice;
+  $('discNotice').textContent = s.disc_notice || '';
+  $('objective').textContent = s.attention==='dialogue' ? 'Choose an answer in FF7 to continue.' : s.objective || (s.running ? 'Working…' : 'Pick a command and press START.');
+  $('reason').textContent = s.attention==='dialogue' && s.dialogue?.length ? s.dialogue.join('\n\n') : s.reason || '—';
   $('mode').textContent = s.mode ? s.mode + (s.execute===false?' (observe)':'') : '—';
   $('field').textContent = s.field_name ? `${s.field_name} · #${s.field_id}` : '—';
   $('mapName').textContent = s.field_name ? '· '+s.field_name : '';

@@ -67,7 +67,7 @@
     {"id": "f67-after-jenova", "field": 256, "progress": [278, 278], "until": [{"progress_at_least": 280}],
      "target": {"type": "line", "line": [[153, -840, 0], [153, -1280, 0]]}, "label": "Continue after Jenova; follow Hojo to the lab.", "source": "script"},
     {"id": "f67-to-68", "field": 256, "progress": [280, 283],
-     "target": {"type": "gateway_at", "position": [1185, -142, 224]}, "label": "Enter Hojo's laboratory on floor 68.", "source": "script"},
+     "target": {"type": "gateway_at", "position": [1185, -142, 224], "fallback": {"type": "line", "line": [[-475, 891, 0], [-396, 1061, 0]]}}, "label": "Enter Hojo's laboratory on floor 68 using the reachable stairs or elevator.", "source": "script"},
 
     {"id": "f68-principal-lab", "field": 262, "progress": [280, 283],
      "target": {"type": "gateway_at", "position": [-604, 3, 0]}, "label": "Enter the principal laboratory chamber and rescue Aeris (boss battle).", "source": "script"},
@@ -79,7 +79,8 @@
      "target": {"type": "line", "line": [[-480, 960, 0], [-345, 1099, 0]]}, "label": "Leave floor 68 by the elevator.", "source": "script"},
 
     {"id": "jail-cell-door", "field": 258, "progress": [293, 293], "until": [{"progress_at_least": 296}],
-     "target": {"type": "ok_line", "line": [[813, 512, 0], [954, 512, 0]]}, "label": "Use the cell door.", "source": "script"},
+     "target": {"type": "line", "line": [[813, 512, 0], [954, 512, 0]]}, "label": "Walk up to the cell door.", "source": "live",
+     "note": "ln0 runs on contact, not on Circle: 121 Circle presses from 40 units did nothing, a 16-unit step toward the line opened the dialogue (2026-10-11)."},
     {"id": "jail-step-out", "field": 258, "progress": [296, 301], "when": ["cell_door_open"], "until": ["cell_door_shut"],
      "target": {"type": "line", "line": [[813, 512, 0], [954, 512, 0]]}, "label": "Step through the open cell door.", "source": "script"},
     {"id": "jail-dead-guard", "field": 258, "progress": [296, 301],
@@ -104,6 +105,12 @@
      "target": {"type": "line", "line": [[406, 751, 0], [418, 628, 0]]}, "label": "Follow the blood trail out of the cell block.", "source": "script"}
   ],
   "choices": [
+    {"field": 263, "field_name": "blin68_2", "progress": [280, 283],
+     "contains": ["Somebody take", "somewhere safe..."],
+     "answer": {"escort_lowest_health": [
+       {"party_id": 2, "suffix": ", I'm countin' on you!"},
+       {"party_id": 1, "suffix": ", take care of her!"}]}, "source": "script",
+     "note": "Owned USA blin68_2, cl script 8 ASK 0x5cc: row 2 keeps Cloud/Barret/Red XIII; row 3 keeps Cloud/Tifa/Red XIII. Send the lower-HP ally with Aeris. Both branches adjust affection by 2."},
     {"field": 242, "contains": ["BEST", "MAKO"], "contains_lower": ["password"], "answer": {"puzzle": "domino_password"}, "source": "live"},
     {"field": 249, "contains": ["Place the Midgar parts"], "when": [{"bank": 1, "address": 68, "any": 248}],
      "answer": "Place the Midgar parts", "source": "live"},

@@ -8,17 +8,24 @@ import ctypes
 import json
 import os
 import subprocess
+import tempfile
 import sys
 import time
+import uuid
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import goals as goal_file
+import checkpoints
+from discs import DiscLibrary
 
 ROOT = Path(__file__).resolve().parent
 UI = ROOT / 'ui'
 HOST, PORT = '127.0.0.1', int(os.environ.get('LAYA_UI_PORT', '7777'))
 NO_WINDOW = 0x08000000  # CREATE_NO_WINDOW: launching never flashes a console
+DISC_LIBRARY = DiscLibrary(ROOT)
+CHECKPOINT_LOCK = threading.Lock()
 
 
 def read_json(path, default=None):
@@ -65,7 +72,7 @@ def pid_alive(pid, image=None):
 
 def bot_state(status):
     """(running, status, error) from the bot's own PID, not DuckStation's."""
-    claimed = status.get('status') in ('loading', 'running')
+    claimed = status.get('status') in ('loading', 'running', 'waiting')
     if not claimed:
         return False, status.get('status', 'idle'), status.get('error')
     if pid_alive(status.get('bot_pid'), image='python'):
@@ -105,20 +112,28 @@ def status_payload():
                               source=d.get('source'), ms=d.get('inference_ms'), sent=d.get('sent'),
                               run=bool(d.get('run_checks')), end=d.get('macro_end')))
     player = state.get('player') or {}
+    disc_needed = status.get('disc_needed')
+    if not disc_needed and state.get('mode') == 'unsupported':
+        disc_needed = state.get('required_disc')
     return dict(
         running=running,
         stopping=(ROOT / 'STOP').exists() and running,
         status=bot_status if running or status else 'idle',
         attention=status.get('attention') if running or status.get('attention') == 'goal' else None,
         goals=goal_file.summary(state),
+        checkpoints=checkpoints.summary(ROOT),
         objective=status.get('objective'), reason=status.get('reason'), error=bot_error,
+        dialogue=status.get('dialogue', []),
         stop_kind=status.get('mode') if status.get('status') == 'blocked' else None,
         actions_sent=status.get('actions_sent'), median_ms=status.get('median_inference_ms'),
         started=status.get('started'), finished=status.get('finished'),
         target=status.get('target'), execute=status.get('execute'),
+        emulator=status.get('emulator'), policy=status.get('policy'),
         game=state.get('game'), mode=state.get('mode'), field_id=state.get('field_id'),
         field_name=state.get('field_name'), gil=state.get('gil'), party=state.get('party', []),
         story_progress=state.get('story_progress'), disc=state.get('required_disc'),
+        discs=DISC_LIBRARY.inventory(), disc_needed=disc_needed,
+        disc_notice=DISC_LIBRARY.needed_message(disc_needed),
         position=player.get('position'), decisions=decisions, now=time.time())
 
 
@@ -147,10 +162,11 @@ def start_bot(options):
         args.append('-ObserveOnly')
     elif mode == 'assist':
         args.append('-AssistOnly')
+    elif mode == 'grind':
+        args += ['-AssistOnly', '-Grind']   # random battles, no story route; battle assist is implied
     elif mode != 'story':
         return 400, dict(ok=False, message='Unknown mode.')
-    if options.get('battle_assist'):
-        args.append('-BattleAssist')
+    args.append('-BattleAssist' if options.get('battle_assist', True) else '-NoBattle')
     if options.get('walk'):
         args.append('-Walk')
     if options.get('explore'):
@@ -167,11 +183,16 @@ def start_bot(options):
     if not 0 <= seconds <= 86400:
         return 400, dict(ok=False, message='Duration must be 0 (until stopped) to 86400 seconds.')
     args += ['-Seconds', str(seconds)]
-    result = subprocess.run(args, cwd=ROOT, capture_output=True, text=True, timeout=30,
-                            creationflags=NO_WINDOW if sys.platform == 'win32' else 0)
+    # Output goes to a file, not a pipe: the hidden bot process inherits a pipe
+    # and kept this request waiting for the full timeout (live 2026-10-11).
+    with tempfile.TemporaryFile('w+') as output:
+        result = subprocess.run(args, cwd=ROOT, stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT,
+                                text=True, timeout=30, creationflags=NO_WINDOW if sys.platform == 'win32' else 0)
+        output.seek(0)
+        message = output.read().strip()
     if result.returncode:
-        return 500, dict(ok=False, message=(result.stderr or result.stdout).strip()[-400:])
-    return 200, dict(ok=True, message=result.stdout.strip())
+        return 500, dict(ok=False, message=message[-400:])
+    return 200, dict(ok=True, message=message)
 
 
 def set_goal(options):
@@ -194,6 +215,39 @@ def stop_bot():
     # Same effect as Stop-Laya.ps1: the loop checks STOP during every hold.
     (ROOT / 'STOP').write_text('stop', encoding='utf-8')
     return 200, dict(ok=True, message='Stop requested. Controller releases within ~10 ms.')
+
+
+def add_disc(options):
+    try:
+        inventory = DISC_LIBRARY.add(options.get('disc'), options.get('path'))
+    except (OSError, ValueError, TypeError) as exc:
+        return 400, dict(ok=False, message=str(exc))
+    return 200, dict(ok=True, message=f'Disc {options["disc"]} added. Load it in your emulator when needed.', discs=inventory)
+
+
+def checkpoint_action(options):
+    with CHECKPOINT_LOCK:
+        if 'enabled' in options:
+            if type(options['enabled']) is not bool:
+                return 400, dict(ok=False, message='Enabled must be true or false.')
+            cfg = checkpoints.read_json(ROOT/'checkpoint-config.json', {})
+            cfg['enabled'] = options['enabled']
+            checkpoints.write_json(ROOT/'checkpoint-config.json', cfg)
+            return 200, dict(ok=True, message='Automatic milestone saves '+('enabled.' if cfg['enabled'] else 'disabled.'))
+        if options.get('action') != 'save':
+            return 400, dict(ok=False, message='Unknown checkpoint action.')
+        status = checkpoints.summary(ROOT)
+        if not status['ready']:
+            return 409, dict(ok=False, message=status['notice'])
+        request = checkpoints.read_json(ROOT/'checkpoint-request.json', {})
+        result = checkpoints.read_json(ROOT/'checkpoint-status.json', {})
+        if request and (request.get('id') != result.get('request_id') or result.get('status') in ('pending','saving')) and time.time()-request.get('time',0) < 30:
+            return 409, dict(ok=False, message='A checkpoint save is already queued.')
+        checkpoints.write_json(ROOT/'checkpoint-request.json', dict(id=uuid.uuid4().hex, time=time.time(), label='Manual checkpoint'))
+        if not bot_state(read_json(ROOT/'laya-status.json', {}) or {})[0]:
+            subprocess.Popen([sys.executable, str(ROOT/'checkpoints.py')], cwd=ROOT,
+                             creationflags=NO_WINDOW if sys.platform == 'win32' else 0)
+        return 202, dict(ok=True, message='Checkpoint queued. It will save on a stable field screen.')
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -237,6 +291,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(*start_bot(options))
         if self.path == '/api/goals':
             return self.send(*set_goal(options))
+        if self.path == '/api/discs':
+            return self.send(*add_disc(options))
+        if self.path == '/api/checkpoints':
+            return self.send(*checkpoint_action(options))
         if self.path == '/api/stop':
             return self.send(*stop_bot())
         self.send(404, {'error': 'not found'})

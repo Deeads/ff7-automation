@@ -18,6 +18,11 @@ TARGET_TYPES = EXIT_TYPES+('actor', 'actor_name', 'inspect', 'ok_line', 'hold', 
 _passes = {}
 
 
+def reset_runtime():
+    """A reloaded save must not inherit walk-through attempts from the old one."""
+    _passes.clear()
+
+
 class RouteError(ValueError):
     pass
 
@@ -109,9 +114,46 @@ def gateway_near(state, position):
 
 
 def actor_near(state, actor, name):
+    radius = max(48, actor['collision_radius']+state['player']['collision_radius']+10)
+    if not name:
+        # Models without a script name (the jail's dead guard) cannot be followed
+        # by name: walk beside the spot, face it, press Circle. Live 2026-10-11:
+        # treated as a plain waypoint, the bot stood there on "Route target reached".
+        return dict(field_id=state['field_id'], position=actor['position'], radius=radius, inspect=True,
+                    entity=actor.get('entity'))
     return dict(field_id=state['field_id'], position=actor['position'], triangle=actor['triangle'],
-                radius=max(48, actor['collision_radius']+state['player']['collision_radius']+10),
-                actor=name, entity=actor.get('entity'))
+                radius=radius, actor=name, entity=actor.get('entity'))
+
+
+BESIDE_RANGE = 110   # how near a model on a bed/counter must be to a walkable spot
+
+
+def beside_actor(state, actor):
+    """A model whose own triangle cannot be walked to (Tifa asleep on the jail
+    bed, z 63): stand on the nearest reachable floor within reach and face it."""
+    position = state['player']['position']
+    floor = [[sum(v[k] for v in t['vertices'])/3 for k in range(3)]
+             for t in state['navigation']['mesh'] if not t['locked']]
+    near = sorted((p for p in floor if math.dist(p[:2], actor['position'][:2]) <= BESIDE_RANGE
+                   and abs(p[2]-position[2]) < 32), key=lambda p: math.dist(p[:2], actor['position'][:2]))
+    for point in near[:6]:
+        target = dict(field_id=state['field_id'], position=point, face=actor['position'], inspect=True, radius=14,
+                      entity=actor.get('entity'), actor_name=actor.get('entity_name'))
+        try:
+            steering(state, target)
+            return target
+        except NoPath:
+            continue
+    return None
+
+
+def reachable_actor(state, actor, name):
+    target = actor_near(state, actor, name)
+    try:
+        steering(state, target)
+        return target
+    except NoPath:
+        return beside_actor(state, actor) or target
 
 
 def walkable_point(state, line, samples=32):
@@ -142,6 +184,16 @@ def walkable_point(state, line, samples=32):
 
 def build_target(state, step):
     spec = step['target']
+    if spec.get('fallback'):
+        primary = {key: value for key, value in spec.items() if key != 'fallback'}
+        try:
+            target = build_target(state, dict(step, target=primary))
+            steering(state, target)
+            return target
+        except NoPath:
+            target = build_target(state, dict(step, target=spec['fallback']))
+            steering(state, target)
+            return target
     kind = spec['type']
     field = state['field_id']
     if kind == 'gateway':
@@ -161,12 +213,12 @@ def build_target(state, step):
         matches = [a for a in state['actors'] if a.get('entity') == spec['entity'] and a['talkable']]
         if not matches:
             raise NoPath(f'Entity {spec["entity"]} is not visible/talkable.')
-        return actor_near(state, matches[0], matches[0]['entity_name'])
+        return reachable_actor(state, matches[0], matches[0]['entity_name'])
     if kind == 'actor_name':
         matches = [a for a in state['actors'] if a['entity_name'] == spec['name'] and a['talkable']]
         if not matches:
             raise NoPath(f'Cannot find the expected character {spec["name"]}.')
-        return actor_near(state, min(matches, key=lambda a: a['distance']), spec['name'])
+        return reachable_actor(state, min(matches, key=lambda a: a['distance']), spec['name'])
     if kind == 'inspect':
         target = dict(field_id=field, position=spec['position'], radius=spec.get('radius', 18), inspect=True)
         for key in ('face', 'triangle'):
@@ -216,6 +268,10 @@ def choice_answer(state, choices, text):
     for choice in choices:
         if choice['field'] != state['field_id']:
             continue
+        if choice.get('field_name') and choice['field_name'] != state.get('field_name'):
+            continue
+        if 'progress' in choice and not choice['progress'][0] <= state['story_progress'] <= choice['progress'][1]:
+            continue
         if not all(s in text for s in choice.get('contains', [])):
             continue
         if not all(s in text.lower() for s in choice.get('contains_lower', [])):
@@ -233,4 +289,16 @@ def choice_answer(state, choices, text):
         if 'one_of' in answer:
             visible = [line.strip(' ?"') for line in text.splitlines()]
             return next((a for a in answer['one_of'] if a in visible), None)
+        if 'escort_lowest_health' in answer:
+            visible = [line.strip(' ?"') for line in text.splitlines()]
+            candidates = []
+            for option in answer['escort_lowest_health']:
+                member = next((p for p in state.get('party', []) if p['id'] == option['party_id']), None)
+                if not member or member.get('max_hp', 0) <= 0 or not 0 <= member.get('hp', -1) <= member['max_hp']:
+                    return None
+                label = member['name'] + option['suffix']
+                if visible.count(label) != 1:
+                    return None
+                candidates.append((member['hp'] / member['max_hp'], len(candidates), label))
+            return min(candidates)[2] if candidates else None
     return None

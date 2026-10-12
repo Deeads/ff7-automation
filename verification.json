@@ -153,5 +153,220 @@
     "evidence": "EXP/AP results screen reads as field request with null walkmesh pointer (fixtures/ram-battle-results.bin); no reliable positive signature found",
     "fix": "after a battle, until field/dialog/menu returns: Circle every 0.7 s (max 60 s); all save HP 0 = game over -> blocked, no presses",
     "live_retest": "pending"
+  },
+  "plug_and_go_upgrade": {
+    "date": "2026-10-10",
+    "regression_checks": {
+      "full_suite_passed": 174,
+      "additional_panel_tests_passed": 3,
+      "focused_final_checks_passed": 41,
+      "core_imports_without_site_packages": true
+    },
+    "live_attachment": {
+      "emulator": "DuckStation",
+      "game": "FF7 USA Disc 1",
+      "field_id": 259,
+      "field_name": "blin67_3",
+      "story_progress": 278,
+      "read_only_ram_verified": true
+    },
+    "live_runtime": {
+      "deterministic_policy_sent_input": true,
+      "battle_encounter": 436,
+      "returned_to_field_after_escape": true,
+      "barret_ko_during_test": true,
+      "save_backup": "backup-before-automation/2026-10-10/SCUS-94163_resume.sav"
+    },
+    "one_command_observation": {
+      "entrypoint": "Start-FF7.ps1 -ObserveOnly -Seconds 5",
+      "completed": true,
+      "actions_sent": 0,
+      "model_decisions": 0
+    },
+    "panel_observed": {
+      "disc_1": "available",
+      "disc_2": "missing",
+      "disc_3": "missing",
+      "start_allowed_with_only_disc_1": true,
+      "wrong_disc_serial_rejected": true,
+      "user_requested_story_start_confirmed_running": true
+    },
+    "not_live_verified": [
+      "other emulators",
+      "reconnect after a real process restart",
+      "all catalogue story entries",
+      "Disc 2/3 prompt detection or swaps",
+      "world map and minigames",
+      "full healing/revival menu navigation"
+    ],
+    "full_game_complete": false
+  },
+  "floor67_route_recovery": {
+    "date": "2026-10-10",
+    "cause": "Upper-floor gateway unreachable from lower-floor walkmesh; objective label masked navigation error.",
+    "fix": "Use the verified ele0 Move trigger as reachable fallback; preserve navigation failure in panel waiting status.",
+    "owned_script_evidence": "blin67_1 entity 18 script 3 MJUMP to field 262, no condition; LINE [-475,891,0] to [-396,1061,0].",
+    "regression_tests_passed": 74,
+    "live_result": "Resumed from field 256 progress 280 and reached field 262 (blin68_1); laboratory dialogue advanced."
+  },
+  "aeris_dialogue_recovery": {
+    "date": "2026-10-10",
+    "cause": "Missing verified answer for blin68_2 Aeris escort choice.",
+    "script_evidence": "cl script 8 ASK 0x5cc, rows 2 and 3; party edits 0x5e8 and 0x5fd.",
+    "fix": "Send the lower-health Tifa/Barret as escort; exact field/progress/text validation; automatically reload route answers and reconsider suspended dialogue when a verified action exists.",
+    "live_result": "Moved cursor down, confirmed Barret, party now Cloud/Tifa/Red XIII; advanced to character naming screen.",
+    "focused_tests_passed": 68,
+    "remaining_handoff": "Red XIII naming requires user confirmation; recognized as naming mode with explicit panel guidance, no blind controller input."
+  },
+  "post_naming_recovery": {
+    "date": "2026-10-10",
+    "cause": "Red XIII current/base HP 731 and MP 125 were initialized before cached equipment maxima (217 and 17); strict record validation blocked dialogue.",
+    "fix": "Accept exact full-health recruitment initialization, mark cached stats pending recalculation, retain raw cached maxima, and clear obsolete naming attention on decoder failures.",
+    "tests_passed": 64,
+    "live_verified": "First resumed confirm at 1791620467.4387703; later dialogue and gameplay reached story progress 284. Controller subsequently stopped via STOP; released in finally.",
+    "fixture": "fixtures/ram-after-red-name.bin"
+  },
+  "advanced_battle_2026_10_10": {
+    "tests_passed": 75,
+    "live_cure": {
+      "action": "Cure",
+      "actor": 1,
+      "target": 2,
+      "before": {
+        "0": 430,
+        "1": 402,
+        "2": 370
+      },
+      "after": {
+        "0": 430,
+        "1": 402,
+        "2": 717
+      },
+      "mp_before": 101,
+      "mp_after": 96
+    },
+    "live_bolt": {
+      "action": "Bolt",
+      "actor": 0,
+      "target": 4,
+      "enemy_hp_before": 260,
+      "enemy_hp_after": 0,
+      "mp_before": 126,
+      "mp_after": 122
+    },
+    "enabled_capabilities": [
+      "attack",
+      "magic"
+    ],
+    "limits": [
+      "Single-target spells on the first visible page",
+      "Item, revival target, scrolling, and Limit submenus not live-verified"
+    ],
+    "results_returned_to_field": true,
+    "focused_tests": 79,
+    "limit_replacement_regression": "passed",
+    "running_pid": 10472,
+    "restart_status": "waiting",
+    "restart_mode": "unsupported"
+  },
+  "milestone_checkpoints_2026_10_11": {
+    "tests": "61 passed: test_checkpoints, test_ui, test_laya_loop, test_connection; 18 checkpoint tests rerun after final optimization",
+    "live": "Control-panel Save Now, navigation stopped, existing DuckStation USA FF7 field",
+    "archive": "1791693612867054400-manual-checkpoint.sav",
+    "bytes": 1839012,
+    "sha256": "f8800d20e692076db37055b5c59e9cde6956da07aa47001d85b2839855802c2a",
+    "story_progress": 284,
+    "slot": "Save Game State 10 UI / SaveGlobalState10 setting / SDL-0/LeftStick",
+    "verified": "New DuckStation file, complete header/payload bounds, USA serial, archive checksum, panel success, previous slot backed up",
+    "limitations": [
+      "Automatic milestone detection tested with synthetic state transitions; no new quest was played for this test.",
+      "Autosaves require a running controller and a stable field screen.",
+      "DuckStation save adapter only.",
+      "Restore was not invoked; current game state was preserved."
+    ]
+  },
+  "field_healing_2026_10_11": {
+    "tests": "259 passed (unittest discover), 24 in test_field_heal",
+    "live": "DuckStation USA FF7, field 250, story progress 284; Cloud and Tifa KO, Red XIII 182/717",
+    "item": "Phoenix Down from inventory slot 3 on Tifa: HP 0 -> 152, slot emptied",
+    "magic": "Tifa Cure: Tifa 152 -> 538 (MP 96 -> 91), Red XIII 182 -> 568 (MP 91 -> 86)",
+    "loop": "laya_loop.py --execute --heal-hp 85: opened menu, Tifa Cure on Red XIII 568 -> 717 (MP 86 -> 81), closed menu; 18 inputs, heal_blocked null",
+    "item_scroll": "FieldHeal navigation reached Hi-Potion in slot 11 (scrolled list) with Tifa targeted; stopped before the use and backed out, stock unchanged",
+    "limitations": [
+      "Potion and Hi-Potion use not committed live; only Phoenix Down was.",
+      "Cure verified in grid cell 0 for one caster; no other spell is navigated.",
+      "Magic top-list row and menu visibility/locking masks read from the reference layout, not toggled live.",
+      "Cloud remained KO: no Phoenix Down left.",
+      "Battle Item submenu is still unmapped; battle_menu.json capabilities unchanged."
+    ]
+  },
+  "phoenix_down_fetch_2026_10_11": {
+    "tests": "268 passed (unittest discover), 9 in test_supplies",
+    "index": "Disc 1 scan: 4 Phoenix Down pickups; only blin64 RLINA (bank 3[172] bit 0) both untaken and reachable from field 250",
+    "route": "laya_loop.py --execute --story: field 250 -> 248 -> 247 by gateway exits in 13 s with Cloud KO; low-HP stop at 20% did not fire while fetching",
+    "pickup": "RLINA opened by a scratch driver (line midpoint, 13.7 units, Circle held 0.6 s): Received Phoenix Down. The loop's first attempt at an end of the line, 42 units away, did not trigger and was fixed (midpoint, reach 16).",
+    "loop_pickup": "Fixed collector target + drive + interact tap opened RLINB at 14.2 units: Received Ether",
+    "revive": "Loop advanced the dialogue, used the Phoenix Down from the Item menu on Cloud (0 -> 172), then Tifa's Cure (172 -> 558) and closed the menu",
+    "limitations": [
+      "The Phoenix Down locker itself was opened by the scratch driver, not by an unattended loop run; the loop path was verified on the neighbouring Ether locker.",
+      "One route, one pickup type (line trigger). Model-actor chests in other fields use the existing collector path.",
+      "Gateway tables only; pickups behind elevators, scripted doors, shops or the world map are not found.",
+      "No random battle occurred on the way; a KO member during a fetch battle is untested."
+    ]
+  },
+  "battle_audit_grind_2026_10_11": {
+    "tests": "281 passed (unittest discover), 13 in test_grind",
+    "audit": "2026-10-10 22:22 battle 438: 235 waits over 117 s on 'Command attack is not in this character's menu' after Limit replaced Attack; party 430/384/700 -> 25/0/354; next three battles fled; Cloud KO in battle 437. Replay of the same transition on fixtures/ram-battle-ready.bin with current code plans Fire instead of stalling.",
+    "battle_item": "Item list phase 5 mapped; Potion on Red XIII 632 -> 717, battle list slot emptied (forced through BattleControl by a scratch driver)",
+    "battle_limit": "Limit list phase 24 mapped; Red XIII Sled Fang 210 -> 0 (forced through BattleControl by a scratch driver)",
+    "nap_room": "blin64 KLINE 'Let's get some rest': 558/118, 538/76, 717/125 -> 688/142, 609/114, 717/127, Gil unchanged",
+    "grind_run": "laya_loop.py --execute --grind --heal-hp 90 --retreat-mp 90, 538 s on field 248: 7 battles, 7 won, 0 fled, lowest member 78% HP; 26 attacks, 4 Bolts; one field-heal visit of 3 Cures, then retreat at healer MP 99 < 103 to field 247, rested to full, returned and fought 6 more; 210 inputs, no blocks",
+    "anomaly": "Battle 429: enemy slot 6 flagged targetable but the cursor could not reach it for 13 s (32 moves); backed out and replanned, then hit it. Move budget cut to 12 afterwards (not re-run live).",
+    "limitations": [
+      "Thresholds were raised (heal 90%, retreat 90% MP) to force the cycle within nine minutes; default thresholds were not exercised to depletion.",
+      "65F enemies only; no battle put anyone under 78%, so in-battle Cure, Potion choice, flee and revive rules were not triggered by the loop itself.",
+      "Limit and Potion were driven by a forced plan, not chosen by the strategy during the run.",
+      "Phoenix Down in battle untested (none in stock). Hi-Potion use untested.",
+      "One rest spot verified; flee/switch/target-budget changes covered by unit tests only."
+    ]
+  },
+  "hidden_enemies_launcher_2026_10_11": {
+    "tests": "283 passed (unittest discover)",
+    "launcher": "FF7 Bot.cmd run with DuckStation already open: control panel opened at 127.0.0.1:7777; Grind started through the panel's /api/start",
+    "run": "150 s on field 248: 2 battles won; 35 ticks waited on hidden Hammer Blasters without attacking; the strategy itself chose Limit once (Choose limit, Select the Limit); one unreachable target was backed out of and replanned",
+    "limitations": [
+      "Idle-turn healing below 70% and taking another enemy after 4 moves did not occur in this run; unit tests only.",
+      "Launcher not tested from a cold start (emulator closed) in this session.",
+      "Only invisibility/retraction and cursor-unselectable enemies are handled; other enemy states (reflect, absorb, counters) rely on the existing checks."
+    ]
+  },
+  "unsure_mode_jail_2026_10_11": {
+    "tests": "293 passed (unittest discover), 10 in test_unsure",
+    "diagnosis": "blin67_2 at progress 293: route step jail-cell-door pressed Circle 121 times 40 units from line ln0, whose script (index 5) runs on contact; nothing fell back to exploration because a route step existed. Then three more blocks in the same field: an unanswered three-way choice, the unnamed dead-guard model treated as a plain waypoint ('Route target reached'), and Tifa on the bed (z 63) with no walkmesh path.",
+    "live": "Story mode from the control panel, no manual input after the fixes: step dropped as no-effect, stepped away and re-entered the door, chose 'Let's just get some sleep' at the unverified choice (progress 293 -> 296), inspected the guard, woke Tifa from the nearest floor point, talked to Barret, left the jail (progress 302), then left the dead-end room blin673b by roaming and reached field 262, where it collected a pickup and fought a battle using Attack and Limit.",
+    "by_hand": "Before the re-entry code existed I walked away and back by scratch driver and chose the Aeris conversation manually; the first choice (Barret) was taken by the guesser.",
+    "limitations": [
+      "Unverified choices are guessed top to bottom; a choice with real consequences (purchases, story branches) is not distinguished from flavour text. --ask-choices turns guessing off.",
+      "Roaming is bounded (3 reopenings per field and progress), so a building-wide dead end still ends in 'Explored every story trigger'.",
+      "The earlier 64F stall (input not registering) was not reproduced; the pad-reach diagnostic and 15 s retry are untested live.",
+      "After field 262 the run was not followed further."
+    ]
+  },
+  "next_step_and_game_over_2026_10_12": {
+    "tests": "309 passed (unittest discover)",
+    "diagnosis": "blin69_1 at progress 311 (Aeris, Barret, Red XIII): the bot entered the glass elevator (eleout) twice, walked across line lin0 and left again, then reported 'Explored every story trigger' and waited. lin0's walk-over script waits for a button (IFKEYON) before BATTLE 460 and SETWORD progress 314, so crossing it does nothing. Later blocks in the same session: a party wipe left the bot on the game over screen, and the Materia exchange prompt before Rufus ('End with the (START) button') was waited on for 5 minutes because the pad had no Start action.",
+    "live": "Story mode from the control panel, no manual game input: pressed Circle on lin0 at first visit; first attempt entered the boss at 386/530/122 HP with no healing items and no Magic command and lost with the second boss at 146/1000 HP. From the milestone-311 save state (full HP) the same code beat both bosses (progress 314), pressed Start on the Materia prompt after 6 s, beat Rufus with Cloud at 70/752 HP (progress 320), rejoined the party (progress 326, field 234) and explored on through fields 235 and 236. Then, still without manual game input: backed out of an Item Shop menu the exploration had opened (Cross after 20 s), walked 3400 units to the lobby exit LINEO once its time allowance scaled with distance (progress 332), sat through the bike chase, lost to Motor Ball twice and each time loaded milestone 326 by itself (game_over_reload attempts 1 and 2), won the next attempt after the battle item list fix let it use Phoenix Downs (progress 335), revived Tifa in the field menu, filled the 'Please make a party of three' screen (Cloud, Red XIII, Aeris) and reached the world map.",
+    "load_hotkey": "LoadGlobalState10 = SDL-0/RightStick added to DuckStation settings.ini (backup settings.ini.before-load-hotkey.bak). Recovery.restore pressed it with the bot stopped: game clock went 727071 -> 727045 (milestone at 727041).",
+    "not_proven": [
+      "Whether the bike-chase sword swings reduce damage: the winning attempt started the chase before the swing code was loaded, and Barret and Tifa still entered Motor Ball at 1 HP in every observed run.",
+      "The party screen is filled by a bounded random walk (about 3 minutes live); its cursors are not decoded.",
+      "Search 2 and later rounds have not been needed live.",
+      "Falling back to an older milestone after three game overs is unit-tested only.",
+      "The party still enters scripted battles without topping up HP first; nothing is bought from shops.",
+      "Nobody has Materia equipped in this save and the bot does not equip any: fights use Attack, Item and Limit.",
+      "World map remains unsupported: the run stops there until someone walks to the next town."
+    ],
+    "battle_item_list": "battle_menu.read_menu bounded the item array by the Item cursor's row count, which is 0 until the Item menu is opened once in a fight; the bot therefore saw no items (4 Phoenix Downs, 1 Elixir held) and reported 'no heal available'. The array is now read in full.",
+    "screens": "field_state/module_request seen live: 8/5 shop menu, 7/5 party formation, 12/6 bike chase, 1/3 world map."
   }
 }

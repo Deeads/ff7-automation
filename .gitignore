@@ -25,6 +25,11 @@ background-test-result.json
 battle-menu-probe.json
 controller-test-command.json
 STOP
+checkpoints/
+checkpoint-config.json
+checkpoint-request.json
+checkpoint-status.json
+field-index.json
 
 # Third-party installers (link to them in the README instead)
 *.exe

@@ -7,7 +7,11 @@ forever.
 """
 from collections import Counter
 
+from explore import _walkable
 from navigation import steering, NoPath
+
+
+LINE_REACH = 16
 
 
 def flag_text(flag):
@@ -36,6 +40,7 @@ class Collector:
             return []  # never detour for a chest while the game has Cloud on a ladder/duct
         checks = state.get('field_checks') or {}
         actors = {a['entity']: a for a in state.get('actors', []) if 'entity' in a}
+        lines = {l['entity']: l for l in (state.get('field_triggers') or {}).get('lines', [])}
         player = state['player']
         found = []
         for treasure in checks.get('treasures', []):
@@ -50,12 +55,23 @@ class Collector:
                                             entity=treasure['entity'], name=treasure['name'], reason=reason))
                 continue
             actor = actors.get(treasure['entity'])
-            if not actor or not actor['talkable'] or not actor['visible']:
+            info = dict(name=treasure['name'], flag=treasure['flag'], grants=treasure['grants'])
+            if treasure['entity'] in lines:
+                # Lockers and shelves are line triggers whose script reads Circle
+                # while Cloud touches the line. Live on blin64 RLINA: 13.7 units
+                # from the middle worked, 42 from an end did not.
+                line = lines[treasure['entity']]['line']
+                point = _walkable(dict(state, player=dict(player, position=[(line[0][k]+line[1][k])/2 for k in range(3)])), line)
+                if point is None:
+                    continue
+                target = dict(field_id=state['field_id'], position=point, line=line, inspect=True, ok_line=True,
+                              radius=LINE_REACH, entity=treasure['entity'], collect=info)
+            elif not actor or not actor['talkable'] or not actor['visible']:
                 continue
-            target = dict(field_id=state['field_id'], position=actor['position'], triangle=actor['triangle'],
-                          radius=max(48, actor['collision_radius']+player.get('collision_radius', 0)+10),
-                          actor=actor['entity_name'], entity=treasure['entity'],
-                          collect=dict(name=treasure['name'], flag=treasure['flag'], grants=treasure['grants']))
+            else:
+                target = dict(field_id=state['field_id'], position=actor['position'], triangle=actor['triangle'],
+                              radius=max(48, actor['collision_radius']+player.get('collision_radius', 0)+10),
+                              actor=actor['entity_name'], entity=treasure['entity'], collect=info)
             try:
                 _, path = steering(state, target)
             except NoPath:

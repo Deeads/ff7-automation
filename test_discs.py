@@ -4,7 +4,8 @@ import struct
 import tempfile
 import unittest
 
-from discs import image_serial, prepare
+from discs import image_serial, prepare, DiscLibrary
+from unittest.mock import patch
 
 
 def iso(path, serial):
@@ -26,6 +27,43 @@ def iso(path, serial):
 
 
 class DiscTests(unittest.TestCase):
+    def test_disc_one_alone_is_a_valid_library_and_later_discs_are_missing(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            path = iso(root/'disc1.iso', 'SCUS_941.63')
+            with patch('pathlib.Path.home', return_value=root):
+                library = DiscLibrary(root)
+                result = library.add(1, str(path))
+                self.assertEqual([d['available'] for d in result], [True, False, False])
+                self.assertIsNone(library.needed_message(1))
+                self.assertIn('Disc 2', library.needed_message(2))
+                self.assertIn('missing', library.needed_message(3))
+                self.assertEqual(len(json.loads((root/'discs.json').read_text())['discs']), 1)
+
+    def test_adding_disc_two_clears_only_its_missing_notice(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            with patch('pathlib.Path.home', return_value=root):
+                library = DiscLibrary(root)
+                path = iso(root/'disc2.iso', 'SCUS_941.64')
+                library.add(2, str(path))
+                self.assertIsNone(library.needed_message(2))
+                self.assertIsNotNone(library.needed_message(3))
+                with self.assertRaisesRegex(ValueError, 'Expected USA Disc 3'):
+                    library.add(3, str(path))
+
+    def test_removed_image_becomes_missing_after_refresh(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            now = [0]
+            with patch('pathlib.Path.home', return_value=root):
+                library = DiscLibrary(root, clock=lambda: now[0])
+                path = iso(root/'disc1.iso', 'SCUS_941.63')
+                library.add(1, str(path))
+                path.unlink()
+                now[0] = 3
+                self.assertFalse(library.inventory()[0]['available'])
+
     def test_serials_and_ordered_playlist(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

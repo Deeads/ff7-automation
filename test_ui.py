@@ -25,6 +25,13 @@ class StartOptionTests(unittest.TestCase):
         _, _, args = self.launch(dict(mode='story'))
         self.assertNotIn('-StopAtHp', args)
 
+    def test_missing_later_discs_do_not_block_start(self):
+        with patch.object(laya_ui.DISC_LIBRARY, 'inventory', return_value=[
+                dict(disc=1, available=True), dict(disc=2, available=False), dict(disc=3, available=False)]):
+            code, _, args = self.launch(dict(mode='story'))
+        self.assertEqual(code, 200)
+        self.assertIsNotNone(args)
+
     def test_bad_stop_hp_rejected_without_launching(self):
         for value in (150, -1, 'lots'):
             code, _, args = self.launch(dict(mode='story', stop_hp=value))
@@ -37,6 +44,10 @@ if __name__ == '__main__':
 
 
 class RunningCheckTests(unittest.TestCase):
+    def test_waiting_process_can_still_be_stopped_from_panel(self):
+        import os
+        self.assertEqual(laya_ui.bot_state(dict(status='waiting', bot_pid=os.getpid()))[:2], (True, 'waiting'))
+
     def test_own_python_process_counts_as_running(self):
         import os
         self.assertEqual(laya_ui.bot_state(dict(status='running', bot_pid=os.getpid()))[:2], (True, 'running'))
@@ -90,3 +101,25 @@ class RunningCheckTests(unittest.TestCase):
                     pass
         self.assertEqual(seen[0]['bot_pid'], os.getpid())
         self.assertEqual(seen[0]['status'], 'loading')
+
+
+class DiscPanelTests(unittest.TestCase):
+    def payload(self, state, status=None):
+        def read(path, default=None):
+            return state if path.name == 'live-state.json' else status or {}
+        with patch.object(laya_ui, 'read_json', side_effect=read), \
+             patch.object(laya_ui, 'tail_lines', return_value=[]), \
+             patch.object(laya_ui.goal_file, 'summary', return_value=[]), \
+             patch.object(laya_ui.DISC_LIBRARY, 'inventory', return_value=[
+                 dict(disc=1, available=True), dict(disc=2, available=False), dict(disc=3, available=False)]):
+            return laya_ui.status_payload()
+
+    def test_disc_one_does_not_show_a_later_disc_warning(self):
+        payload = self.payload(dict(mode='field', required_disc=1))
+        self.assertIsNone(payload['disc_notice'])
+        self.assertEqual([d['available'] for d in payload['discs']], [True, False, False])
+
+    def test_missing_disc_named_only_when_an_unsupported_save_requires_it(self):
+        self.assertIsNone(self.payload(dict(mode='field', required_disc=2))['disc_notice'])
+        self.assertIn('Disc 2', self.payload(dict(mode='unsupported', required_disc=2))['disc_notice'])
+        self.assertIn('Disc 3', self.payload({}, dict(disc_needed=3))['disc_notice'])

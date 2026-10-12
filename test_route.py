@@ -86,6 +86,17 @@ class MigratedRouteTests(unittest.TestCase):
 
 
 class ShinraUpperFloorTests(unittest.TestCase):
+    def test_floor67_lower_level_uses_verified_elevator(self):
+        from navigation import NoPath, steering
+        s = json.loads((Path(__file__).parent/'fixtures/live-state-256-unreachable.json').read_text())
+        step = current_step(s, STEPS)
+        primary = dict(step, target={k: v for k, v in step['target'].items() if k != 'fallback'})
+        with self.assertRaises(NoPath):
+            steering(s, build_target(s, primary))
+        target, _ = objective(s)
+        self.assertEqual(target['line'], [[-475, 891, 0], [-396, 1061, 0]])
+        self.assertIsNotNone(steering(s, target)[0])
+
     def test_floor_66_eavesdrop_sequence(self):
         self.assertEqual(step_id(250, 264), 'f66-restroom')
         self.assertEqual(step_id(252, 264), 'f66-vent')
@@ -153,6 +164,11 @@ class TargetBuildTests(unittest.TestCase):
         from navigation import NoPath
         with self.assertRaises(NoPath):
             build_target(self.s, dict(target=dict(type='gateway_at', position=[100, 100, 0])))
+
+    def test_reachable_primary_exit_kept_when_fallback_exists(self):
+        spec = dict(type='gateway_at', position=[980, 510, 0],
+                    fallback=dict(type='line', line=[[300, 500, 0], [700, 500, 0]]))
+        self.assertEqual(build_target(self.s, dict(target=spec))['gateway'], 0)
 
     def test_actor_by_entity_and_ok_line_and_hold(self):
         target = build_target(self.s, dict(target=dict(type='actor', entity=6)))

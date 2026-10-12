@@ -173,6 +173,31 @@ def field_checks(data, section_offset):
 LINE, MAPJUMP = 0xD0, 0x60
 # Model entities: 2 = talk, 3 = contact. LINE entities: 2 = [OK], 3-7 = move/go.
 TALK, CONTACT = 2, 3
+IFKEYS = (0x30, 0x31, 0x32)          # IFKEY / IFKEYON / IFKEYOFF
+IF_WORD = (0x15, 0x16)               # IFSW / IFUW: banks, a(2), b(2), comparison, jump
+SETBYTE, SETWORD, BATTLE = 0x80, 0x81, 0x70
+PROGRESS_BANK = 0x20                 # destination bank 2 (16-bit view of the save bank), source literal
+
+
+def story_use(bodies):
+    """What a trigger's scripts say about the main story.
+
+    gates: story-progress values its scripts compare against (bank 2, word 0).
+    advances: it writes story progress or starts a scripted battle.
+    keys: a walk-over script that also waits for a button (IFKEY): stand on it and press Circle.
+    """
+    gates, advances, keys = set(), False, False
+    for index, ops in bodies.items():
+        for op, operands in ops:
+            if op in IF_WORD and len(operands) >= 6 and operands[0] == PROGRESS_BANK and operands[1:3] == bytes(2):
+                gates.add(struct.unpack_from('<H', operands, 3)[0])
+            elif op == SETWORD and len(operands) >= 4 and operands[0] == PROGRESS_BANK and operands[1] == 0:
+                advances = True
+            elif op == BATTLE:
+                advances = True
+            elif op in IFKEYS and index >= CONTACT:
+                keys = True
+    return dict(gates=sorted(gates), advances=advances, keys=keys)
 
 
 def _script_body(section, parsed, entity, index):
@@ -211,12 +236,13 @@ def story_triggers(section):
                 lines.append(dict(entity=entity, name=name, line=[a, b],
                                   ok=2 in live and not any(i >= 3 for i in live), scripts=kinds,
                                   jumps=any(op == MAPJUMP for ops in live.values() for op, _ in ops),
-                                  asks=any(op in (ASK, MENU) for ops in live.values() for op, _ in ops)))
+                                  asks=any(op in (ASK, MENU) for ops in live.values() for op, _ in ops),
+                                  **story_use(live)))
         elif TALK in live:
             ops = live[TALK]
             talks.append(dict(entity=entity, name=name,
                               asks=any(op in (ASK, MENU) for op, _ in ops),
-                              jumps=any(op == MAPJUMP for op, _ in ops)))
+                              jumps=any(op == MAPJUMP for op, _ in ops), **story_use({TALK: ops})))
     return dict(lines=lines, talks=talks)
 
 

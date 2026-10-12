@@ -75,9 +75,13 @@ class StrategyTests(unittest.TestCase):
         a = choose(battle([(500, 700, 10)]*3, [(90, 150), (40, 150), (0, 150)]), 0, PARTY, {})
         self.assertEqual((a.command, a.target_slot), ('attack', 5))
 
-    def test_phoenix_down_first(self):
+    def test_emergency_heal_before_revival(self):
         a = choose(battle([(500, 700, 10), (0, 600, 0), (100, 700, 0)], [(90, 150)]), 0, PARTY, {PHOENIX_DOWN: 1, POTION: 3})
-        self.assertEqual((a.command, a.item, a.target_side, a.target_slot), ('item', PHOENIX_DOWN, 'ally', 1))
+        self.assertEqual((a.command, a.item, a.target_side, a.target_slot), ('item', POTION, 'ally', 2))
+
+    def test_revive_when_survivors_are_not_in_immediate_danger(self):
+        a = choose(battle([(500, 700, 10), (0, 600, 0), (400, 700, 0)], [(90, 150)]), 0, PARTY, {PHOENIX_DOWN: 1})
+        self.assertEqual((a.command, a.item, a.target_slot), ('item', PHOENIX_DOWN, 1))
 
     def test_cure_with_restore_and_mp_else_potion(self):
         low = battle([(500, 700, 10), (400, 600, 20), (200, 700, 0)], [(90, 150)])
@@ -278,10 +282,11 @@ class PostBattleTests(unittest.TestCase):
         self.assertGreaterEqual(pad.presses.count('confirm'), 3)
         self.assertIn('post_battle_done', log)
 
-    def test_game_over_presses_nothing_and_blocks(self):
+    def test_game_over_without_a_save_state_presses_nothing_and_blocks(self):
         pad, status, log = self.run_loop([0, 0, 0])
         self.assertEqual([p for p in pad.presses if p != 'wait'], [])
         self.assertEqual((status['status'], status['mode']), ('blocked', 'game_over'))
+        self.assertIn('game_over_blocked', log)
 
 
 class LowHpStopTests(unittest.TestCase):

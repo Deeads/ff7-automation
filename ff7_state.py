@@ -12,22 +12,19 @@ import math
 import struct
 import time
 
-from ram_probe import K, MBI, read
+from ram_probe import K, read
+from emulators import (StateError, RAM_SIZE, KERNEL_HASH, processes, select_process,
+                       regions, find_ram, live_mappings)
 from battle import decode_battle
 from field_script import field_checks, field_triggers, BYTE_BANKS
 import battle_menu
+import field_menu
 
-RAM_SIZE = 0x200000
 SAVE = 0x9C6E4
 GAME = 0x9ABF4
 TEMP_BANK = 0x75E24  # field temp bank 5/6 (reference/ffvii_field_ffvii_address.txt)
 DIRECTION_ANGLES = dict(up=0, up_left=32, left=64, down_left=96,
                         down=128, down_right=160, right=192, up_right=224)
-KERNEL_HASH = '2e9e460274da2383970500a7490bab98f5652752b67dbea630c3e72c9b460106'
-
-
-class StateError(RuntimeError):
-    pass
 
 
 def fftext(data):
@@ -42,6 +39,25 @@ def fftext(data):
 
 def choice_row(pointer_y):
     return (pointer_y-6)//16 if pointer_y >= 6 and (pointer_y-6) % 16 == 0 else None
+
+
+def character_vitals(data, record):
+    """Recruitment initializes base/current stats before equipment maxima.
+
+    Accept that exact full-health initialization pattern, retaining provenance;
+    arbitrary current HP/MP above the cached maximum remains invalid.
+    """
+    hp, base_hp, mp, base_mp = struct.unpack_from('<4H', data, record+0x2C)
+    max_hp, max_mp = struct.unpack_from('<2H', data, record+0x38)
+    if not (1 <= max_hp <= 9999 and 0 <= max_mp <= 999 and hp <= 9999 and mp <= 999):
+        raise StateError('Uninitialized or invalid character record.')
+    pending = hp > max_hp or mp > max_mp
+    if pending and not (hp == base_hp >= max_hp and mp == base_mp >= max_mp):
+        raise StateError('Uninitialized or invalid character record.')
+    return dict(hp=hp, mp=mp, max_hp=base_hp if pending else max_hp,
+                max_mp=base_mp if pending else max_mp,
+                stats_pending_recalculation=pending,
+                cached_max_hp=max_hp, cached_max_mp=max_mp)
 
 
 def decode(data):
@@ -65,30 +81,36 @@ def decode(data):
             raise StateError('Invalid party record.')
         record = SAVE + 0x54 + {9: 6, 10: 7}.get(char_id, char_id) * 132
         level = data[record + 1]
-        hp, mp = u16(record + 0x2C), u16(record + 0x30)
-        max_hp, max_mp = u16(record + 0x38), u16(record + 0x3A)
-        if not 1 <= level <= 99 or not 1 <= max_hp <= 9999 or hp > max_hp or mp > max_mp:
+        if not 1 <= level <= 99:
             raise StateError('Uninitialized or invalid character record.')
+        vitals = character_vitals(data, record)
         materia = [data[record+at] for at in range(0x40, 0x80, 4) if data[record+at] != 0xFF]
         party.append(dict(id=char_id, name=fftext(data[record+0x10:record+0x1C]),
-                          level=level, hp=hp, max_hp=max_hp, mp=mp, max_mp=max_mp,
+                          level=level, **vitals,
                           limit_bar=data[record+0x0F], materia=materia))
     if not party:
         raise StateError('No loaded party.')
     state = dict(schema=1, captured_monotonic=time.monotonic(), game='FF7-USA-verified',
                  mode='unsupported', field_id=u16(0x9A05C),
                  field_state=data[GAME+1], module_request=u16(0x9C560),
-                 story_progress=u16(SAVE+0xBA4), gil=u32(SAVE+0xB7C), party=party,
+                 story_progress=u16(SAVE+0xBA4), game_seconds=u32(SAVE+0xB80),
+                 gil=u32(SAVE+0xB7C), party=party,
                  health_source='persistent party records; not battle combatant HP',
                  player=None, nearby_actors=[], dialogs=[], navigation=None)
     state['key_items'] = list(data[SAVE+0xBE4:SAVE+0xBEC])
     # Item stock: u16 per slot, id in bits 0-8, quantity in bits 9-15 (savemap 0x4FC).
-    items = {}
+    items, item_slots = {}, {}
     for slot in range(320):
         value = u16(SAVE+0x4FC+slot*2)
         if value != 0xFFFF:
             items[value & 0x1FF] = items.get(value & 0x1FF, 0)+(value >> 9)
+            item_slots.setdefault(value & 0x1FF, slot)
     state['items'] = items
+    # Menu rows: the Item list shows stock slots in order, and party rows keep
+    # their formation slot even when an earlier one is empty.
+    state['item_slots'] = item_slots
+    state['party_slots'] = [slot for slot in range(3) if data[SAVE+0x4F8+slot] != 255]
+    state['menu_access'] = dict(visible=u16(SAVE+0xBC0), locked=u16(SAVE+0xBC2))
     state['required_disc'] = data[SAVE+0xEA4]
     state['puzzles'] = {'domino_password': {1: 'BEST', 2: 'BOMB', 4: 'MAKO', 8: 'KING'}.get(data[SAVE+0xD5A] & 15)}
     state['puzzles'].update(midgar_placed=data[SAVE+0xD58]&0xF8,
@@ -104,6 +126,7 @@ def decode(data):
             state['mode'] = 'battle'
             menu_map = battle_menu.load_map()
             if menu_map:
+                state['battle']['advanced_configured'] = True
                 state['battle']['menu'] = battle_menu.read_menu(data, menu_map)
         return state
     if ptr(0x9C6E0, 0x100) != GAME or ptr(0x9C544, 132) != 0x74EA4:
@@ -112,6 +135,13 @@ def decode(data):
     # observed main-menu and normal-field cases are enabled by this adapter.
     if state['field_state'] == 9 and state['module_request'] == 5:
         state['mode'] = 'menu'
+        state['menu'] = field_menu.read_menu(data)
+        return state
+    # MENU 6, parameter = character ID (owned blin68_2 cl script 8).
+    # Naming is distinct from the main menu: Cross would erase the name.
+    if state['field_state'] == 6 and state['module_request'] == 5 and u16(GAME+2) <= 8:
+        state['mode'] = 'naming'
+        state['naming_character'] = u16(GAME+2)
         return state
     if state['field_state'] != 0 or state['module_request'] != 1:
         return state
@@ -158,6 +188,10 @@ def decode(data):
                                 destination=[round(n/4096) for n in struct.unpack_from('<iii', data, at+0x78)])
     state['movement_locked'] = bool(data[GAME+0x32]) or (bool(ladder_state) and ladder_state not in (4, 5))
     state['fading'] = u16(GAME+0x38) != 0
+    state['encounters_on'] = data[GAME+0x3B] == 0   # field address notes: battle check on/off
+    # Buttons the field module currently sees (0x1000 up, 0x2000 right, 0x4000 down,
+    # 0x8000 left). Live 2026-10-11: 0x1000/0x4000 while the virtual pad held up/down.
+    state['pad'] = u16(GAME+0x68)
     state['mode'] = 'field'
     actors = [actor(i) for i in range(count) if i != player_id]
     for item in actors:
@@ -245,77 +279,27 @@ def party_hp(data):
 
 
 def find_duckstation():
-    class Entry(C.Structure):
-        _fields_ = [('size', W.DWORD), ('usage', W.DWORD), ('pid', W.DWORD),
-                    ('heap', C.c_size_t), ('module', W.DWORD), ('threads', W.DWORD),
-                    ('parent', W.DWORD), ('priority', W.LONG), ('flags', W.DWORD),
-                    ('exe', W.WCHAR*260)]
-    K.CreateToolhelp32Snapshot.argtypes = [W.DWORD, W.DWORD]
-    K.CreateToolhelp32Snapshot.restype = W.HANDLE
-    K.Process32FirstW.argtypes = K.Process32NextW.argtypes = [W.HANDLE, C.POINTER(Entry)]
-    snapshot = K.CreateToolhelp32Snapshot(2, 0)
-    if snapshot == C.c_void_p(-1).value:
-        raise C.WinError(C.get_last_error())
-    pids = []
-    try:
-        entry = Entry(); entry.size = C.sizeof(entry)
-        more = K.Process32FirstW(snapshot, C.byref(entry))
-        while more:
-            if entry.exe.lower().startswith('duckstation') and entry.exe.lower().endswith('.exe'):
-                pids.append(entry.pid)
-            more = K.Process32NextW(snapshot, C.byref(entry))
-    finally:
-        K.CloseHandle(snapshot)
-    if len(pids) != 1:
-        raise StateError(f'Expected one DuckStation process; found {len(pids)}. Use --pid when needed.')
-    return pids[0]
+    return select_process(processes(), 'duckstation')['pid']
 
 
 class LiveRAM:
-    def __init__(self, pid=None):
-        self.pid = pid or find_duckstation()
+    def __init__(self, pid=None, emulator='auto', base=None, stopped=lambda: False):
+        process = select_process(processes(), emulator, pid)
+        self.pid, self.emulator = process['pid'], process['emulator']
         self.handle = K.OpenProcess(0x410, False, self.pid)  # QUERY_INFORMATION | VM_READ only
         if not self.handle:
             raise C.WinError(C.get_last_error())
         try:
-            found = []
-            address = 0
-            while address < 0x7FFFFFFFFFFF:
-                info = MBI()
-                if not K.VirtualQueryEx(self.handle, address, C.byref(info), C.sizeof(info)):
-                    break
-                base, size = info.BaseAddress or 0, info.RegionSize
-                if not size or base+size <= address:
-                    break
-                if info.State == 0x1000 and info.Type == 0x40000 and size in (RAM_SIZE, 4*RAM_SIZE) and not info.Protect & 0x101:
-                    # Identify FF7 by its executable only: results, game-over and
-                    # transition screens are still FF7 even though decode() refuses them.
-                    try:
-                        if hashlib.sha256(read(self.handle, base+0x44000, 0x100)).hexdigest() == KERNEL_HASH:
-                            found.append(base)
-                    except OSError:
-                        pass
-                address = base+size
+            found = find_ram(self.handle, regions(self.handle), base=base, stopped=stopped)
             if len(found) > 1:
-                found = self._live_mappings(found)
+                found = live_mappings(self.handle, found)
             if len(found) != 1:
-                raise StateError(f'Expected one verified FF7 RAM mapping; found {len(found)}.')
+                raise StateError(f'Expected one verified FF7 USA RAM mapping; found {len(found)}. '
+                                 'Load a supported USA save; other regions/layouts are not yet supported.')
             self.base = found[0]
         except BaseException:
             self.close()
             raise
-
-    def _live_mappings(self, bases):
-        """DuckStation can expose more than one mapping holding the FF7 RAM.
-        Seen live: two adjacent 8 MB views with identical bytes (mirrors of the
-        same memory), so either is correct. If copies differ (e.g. a frozen
-        rewind/save-state buffer), keep the one that changes between two reads."""
-        first = {b: hashlib.sha256(read(self.handle, b, RAM_SIZE)).digest() for b in bases}
-        if len(set(first.values())) == 1:
-            return bases[:1]  # identical mirror views of the same RAM (seen live): any one is correct
-        time.sleep(0.15)
-        changing = [b for b in bases if hashlib.sha256(read(self.handle, b, RAM_SIZE)).digest() != first[b]]
-        return changing or bases
 
     def raw(self):
         return read(self.handle, self.base, RAM_SIZE)
@@ -333,6 +317,7 @@ class LiveRAM:
                         raise StateError('Game changed modes while reading memory.')
                 state = decode(data)
                 state['pid'] = self.pid
+                state['emulator'] = self.emulator
                 return state
             except StateError as exc:
                 last_error = exc

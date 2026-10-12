@@ -24,6 +24,10 @@ STALL_ENDS = ('Movement stalled',)
 
 
 def movement_command(initial, current, target, run=True):
+    if current.get('connection_epoch') != initial.get('connection_epoch'):
+        return None, False, 'Emulator reconnected; discard the previous movement plan.'
+    if current.get('game_seconds', 0) < initial.get('game_seconds', 0):
+        return None, False, 'Save timeline rewound; replan.'
     if current['mode'] != 'field' or current['field_id'] != initial['field_id']:
         return None, False, 'Gameplay mode or field changed.'
     if current.get('movement_locked') or current.get('fading'):
@@ -85,6 +89,7 @@ def drive(controller, source, initial, target, stopped, run=True, max_seconds=20
     alternate = None          # (direction, hold_until)
     sidestep_at = None
     reason = 'Executor ended.'
+    pad_seen = False          # the game registered a held direction at least once
     try:
         while True:
             now = clock()
@@ -102,6 +107,7 @@ def drive(controller, source, initial, target, stopped, run=True, max_seconds=20
             try:
                 current = source.snapshot(attempts=1)
                 target = track_actor(current, target)
+                pad_seen = pad_seen or bool(held and current.get('pad', 0) & 0xF000)
                 action, running, reason = movement_command(initial,current,target,run)
             except (StateError, NoPath) as exc:
                 reason = f'State or path changed; release and replan ({exc}).'
@@ -152,7 +158,8 @@ def drive(controller, source, initial, target, stopped, run=True, max_seconds=20
                 duration_s=round(duration,3), held_s=round(held_seconds,3),
                 cross_held_pct=round(100*cross_seconds/held_seconds,1) if held_seconds else 0.0,
                 direction_changes=direction_changes, report_writes=report_writes,
-                intermediate_releases=0, alternates=alternates, macro_end=reason)
+                intermediate_releases=0, alternates=alternates, macro_end=reason,
+                pad_seen=pad_seen if 'pad' in initial else None)
 
 
 def stalled(result):

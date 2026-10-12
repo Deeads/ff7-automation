@@ -87,6 +87,34 @@ class ChoiceTests(unittest.TestCase):
 
 
 class ControllerTests(unittest.TestCase):
+    def test_navigation_failure_is_visible_instead_of_objective_label(self):
+        state = json.loads((Path(__file__).parent/'fixtures/live-state-256-unreachable.json').read_text())
+        from route import gateway_near
+        target = gateway_near(state, [1185, -142, 224])
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            statuses = []
+            class Source:
+                pid = 12
+                def snapshot(self, attempts=100): return copy.deepcopy(state)
+                def close(self): pass
+            real_write = laya_loop.atomic_json
+            def write(path, value):
+                if path.name == 'laya-status.json':
+                    statuses.append(copy.deepcopy(value))
+                    if value.get('attention') == 'route':
+                        (root/'STOP').write_text('stop')
+                return real_write(path, value)
+            with patch.object(laya_loop, 'ROOT', root), patch.object(laya_loop, 'STOP', root/'STOP'), \
+                 patch.object(laya_loop, 'LiveRAM', return_value=Source()), \
+                 patch.object(laya_loop, 'objective', return_value=(target, 'Enter the laboratory.')), \
+                 patch.object(laya_loop, 'atomic_json', side_effect=write), patch('builtins.print'):
+                laya_loop.main(['--story', '--no-collect', '--seconds', '2'])
+            waiting = [s for s in statuses if s['status'] == 'waiting']
+            self.assertTrue(waiting)
+            self.assertTrue(waiting[0]['reason'].startswith('Navigation blocked:'))
+            self.assertEqual(waiting[0]['objective'], 'Enter the laboratory.')
+
     def test_unknown_story_route_stops_and_releases_controller(self):
         class Source:
             pid = 12
